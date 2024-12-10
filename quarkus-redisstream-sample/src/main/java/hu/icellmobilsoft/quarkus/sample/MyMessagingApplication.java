@@ -36,13 +36,15 @@ public class MyMessagingApplication {
      **/
     @Incoming("words-in")
     @Outgoing("uppercase")
-    public Message<String> toUpperCase(Message<String> message) {
+    public Message<String> toUpperCase(Message<Object> message) {
         Log.infov("Message received: [{0}]", message.getPayload());
         for (Object metadata : message.getMetadata()) {
             Log.infov("metadata: [{0}]", message.getPayload());
         }
-
-        return message.withPayload(message.getPayload().toUpperCase());
+        if (message.getPayload() != null) {
+            return message.withPayload(message.getPayload().toString().toUpperCase());
+        }
+        return message.withPayload("Hello");
     }
 
     /**
