@@ -30,6 +30,11 @@ public class MyMessagingApplication {
         Stream.of("Hello", "with", "Quarkus", "Messaging", "message").forEach(string -> emitter.send(string));
     }
 
+    public void sendMessage(String message) {
+        emitter.send(message);
+    }
+
+
     /**
      * Consume the message from the "words-in" channel, uppercase it and send it to the uppercase channel.
      * Messages come from the broker.

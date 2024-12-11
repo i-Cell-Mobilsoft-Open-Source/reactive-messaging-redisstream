@@ -60,7 +60,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     @Override
     public Flow.Subscriber<? extends Message<?>> getSubscriber(Config config) {
         return MultiUtils.via(multi -> multi.onItem().transformToUniAndConcatenate(message -> {
-                            Log.infov("msg sent:[{0}]", message);
+                            Log.infov("msg sent:[{0}]", message.getPayload());
                             return redisAPI.xadd(toXadd(message));
                         }
                 )

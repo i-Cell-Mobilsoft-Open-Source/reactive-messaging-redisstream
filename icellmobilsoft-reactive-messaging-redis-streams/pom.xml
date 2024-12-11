@@ -10,6 +10,9 @@
     </parent>
 
     <artifactId>icellmobilsoft-reactive-messaging-redis-streams</artifactId>
+    <properties>
+        <jandex-maven-plugin.version>3.2.3</jandex-maven-plugin.version>
+    </properties>
 
     <dependencies>
         <dependency>
@@ -21,5 +24,22 @@
             <artifactId>smallrye-reactive-messaging-provider</artifactId>
         </dependency>
     </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>io.smallrye</groupId>
+                <artifactId>jandex-maven-plugin</artifactId>
+                <version>${jandex-maven-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>make-index</id>
+                        <goals>
+                            <goal>jandex</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

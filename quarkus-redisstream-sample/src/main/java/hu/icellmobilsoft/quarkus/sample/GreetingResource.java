@@ -19,7 +19,7 @@ public class GreetingResource {
     @GET
     @Produces(MediaType.TEXT_PLAIN)
     public String hello() {
-        eventAction.sendMessages();
+        eventAction.sendMessage("Hello Quarkus from redis stream");
         return "Hello from Quarkus REST";
     }
 }
