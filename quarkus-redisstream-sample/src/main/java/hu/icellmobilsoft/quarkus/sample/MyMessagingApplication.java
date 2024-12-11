@@ -50,7 +50,7 @@ public class MyMessagingApplication {
             Log.infov("metadata: [{0}]", message.getPayload());
         }
         try {
-            TimeUnit.MILLISECONDS.sleep(500);
+            TimeUnit.MILLISECONDS.sleep(2000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
