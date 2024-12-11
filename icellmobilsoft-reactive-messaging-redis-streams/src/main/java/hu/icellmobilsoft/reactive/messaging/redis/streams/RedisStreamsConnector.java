@@ -54,7 +54,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     private Uni<Response> xReadMessage() {
         List<String> xread = List.of("GROUP", group, consumer, "COUNT", "1", "STREAMS", streamKey, ">");
 
-        return redisAPI.xreadgroup(xread);
+        return redisAPI.xreadgroup(xread)
+//                .invoke(r -> Log.infov("XREADGROUP called with response: [{0}]", r))
+                ;
     }
 
     @Override

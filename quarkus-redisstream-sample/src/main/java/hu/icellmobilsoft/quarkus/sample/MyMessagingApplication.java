@@ -2,6 +2,7 @@ package hu.icellmobilsoft.quarkus.sample;
 
 import io.quarkus.logging.Log;
 import io.quarkus.runtime.StartupEvent;
+import io.smallrye.reactive.messaging.annotations.Blocking;
 
 import org.eclipse.microprofile.reactive.messaging.*;
 
@@ -9,6 +10,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 @ApplicationScoped
@@ -41,10 +43,16 @@ public class MyMessagingApplication {
      **/
     @Incoming("words-in")
     @Outgoing("uppercase")
+    @Blocking(ordered = false, value = "incoming-pool")
     public Message<String> toUpperCase(Message<Object> message) {
         Log.infov("Message received: [{0}]", message.getPayload());
         for (Object metadata : message.getMetadata()) {
             Log.infov("metadata: [{0}]", message.getPayload());
+        }
+        try {
+            TimeUnit.MILLISECONDS.sleep(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
         if (message.getPayload() != null) {
             return message.withPayload(message.getPayload().toString().toUpperCase());
