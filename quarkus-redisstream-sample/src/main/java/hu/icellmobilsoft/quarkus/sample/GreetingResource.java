@@ -22,7 +22,7 @@ public class GreetingResource {
     @GET
     @Produces(MediaType.TEXT_PLAIN)
     public String hello() {
-        String message = "Hello Quarkus" + counter++;
+        String message = "Hello Quarkus " + counter++;
         eventAction.sendMessage(message);
         return message;
     }

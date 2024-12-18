@@ -1,12 +1,10 @@
 package hu.icellmobilsoft.reactive.messaging.redis.streams;
 
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Flow;
-import java.util.stream.StreamSupport;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -16,59 +14,65 @@ import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.eclipse.microprofile.reactive.messaging.spi.Connector;
 
-import hu.icellmobilsoft.reactive.messaging.redis.streams.api.QuarkusRedisStreamsAdapter;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreamsProducer;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.quarkus.QuarkusRedisStreamsProducer;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.StreamEntry;
 import io.quarkus.logging.Log;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.reactive.messaging.annotations.ConnectorAttribute;
 import io.smallrye.reactive.messaging.connector.InboundConnector;
 import io.smallrye.reactive.messaging.connector.OutboundConnector;
 import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
-import io.vertx.mutiny.redis.client.RedisAPI;
-import io.vertx.mutiny.redis.client.Response;
 
 @ApplicationScoped
 @Connector("icellmobilsoft-redis-streams")
+@ConnectorAttribute(name = "connection-key", description = "The redis connection key to use", defaultValue = RedisStreamsProducer.DEFAULT_CONNECTION_KEY, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
+@ConnectorAttribute(name = "stream-key", description = "The Redis key holding the stream items", mandatory = true, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
+@ConnectorAttribute(name = "group", description = "The consumer group of the Redis stream to read from", mandatory = true, type = "string", direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "xread-count", description = "COUNT parameter of XREADGROUP command", type = "int", defaultValue = "1", direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "xread-block-ms", description = "BLOCK parameter of XREADGROUP command", type = "int", defaultValue = "5000", direction = ConnectorAttribute.Direction.INCOMING)
 public class RedisStreamsConnector implements InboundConnector, OutboundConnector {
 
 
     @Inject
-    protected QuarkusRedisStreamsAdapter redisAPI;
-    private String group;
-    private String streamKey;
+    protected QuarkusRedisStreamsProducer redisStreamsProducer;
     private String consumer;
 
     @PostConstruct
     void init() {
-        this.group = "group";
-        this.streamKey = "stream";
         this.consumer = "consumer";
-        if (!redisAPI.existGroup(streamKey, group)) {
-            String create = redisAPI.xGroupCreate(streamKey, group);
-            Log.info(create);
-        }
     }
 
 
     @Override
     public Flow.Publisher<? extends Message<?>> getPublisher(Config config) {
-        return Multi.createBy().repeating().uni(this::xReadMessage).indefinitely().flatMap(l -> Multi.createFrom().iterable(l)).filter(Objects::nonNull)
+        RedisStreamsConnectorIncomingConfiguration incomingConfig = new RedisStreamsConnectorIncomingConfiguration(config);
+        String streamKey = incomingConfig.getStreamKey();
+        String group = incomingConfig.getGroup();
+
+        RedisStreams redisAPI = redisStreamsProducer.produce(incomingConfig.getConnectionKey());
+        if (!redisAPI.existGroup(streamKey, group)) {
+            String create = redisAPI.xGroupCreate(streamKey, group);
+            Log.info(create);
+        }
+        return Multi.createBy().repeating().uni(() -> xReadMessage(redisAPI, incomingConfig)).indefinitely().flatMap(l -> Multi.createFrom().iterable(l)).filter(Objects::nonNull)
                 .invoke(r -> Log.infov("msg received: [{0}]", r)).map(Message::of);
     }
 
-    private Uni<List<StreamEntry>> xReadMessage() {
-        List<String> xread = List.of("GROUP", group, consumer, "COUNT", "1", "BLOCK", "30000", "STREAMS", streamKey, ">");
-
-        return redisAPI.xReadGroup(streamKey, group, consumer, 1, 2000)
-                .invoke(r -> Log.infov("XREADGROUP called with response: [{0}]", r))
-                ;
+    private Uni<List<StreamEntry>> xReadMessage(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
+        return redisAPI.xReadGroup(incomingConfig.getStreamKey(), incomingConfig.getGroup(), consumer, incomingConfig.getXreadCount(), incomingConfig.getXreadBlockMs())
+                .invoke(r -> Log.infov("XREADGROUP called with response: [{0}]", r)).onCancellation().invoke(() -> Log.infov("XREADGROUP cancelled"));
     }
 
     @Override
     public Flow.Subscriber<? extends Message<?>> getSubscriber(Config config) {
+        RedisStreamsConnectorOutgoingConfiguration outgoingConfig = new RedisStreamsConnectorOutgoingConfiguration(config);
+        RedisStreams redisAPI = redisStreamsProducer.produce(outgoingConfig.getConnectionKey());
         return MultiUtils.via(multi -> multi.onItem().transformToUniAndConcatenate(message -> {
                             Log.infov("msg sent:[{0}]", message.getPayload());
-                            return redisAPI.xAdd(streamKey, Map.of("payload", message.getPayload().toString(), "timestamp", LocalDateTime.now().toString()));
+                            return redisAPI.xAdd(outgoingConfig.getStreamKey(), Map.of("payload", message.getPayload().toString(), "timestamp", LocalDateTime.now().toString()));
                         }
                 )
         );

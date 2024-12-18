@@ -1,22 +1,21 @@
-package hu.icellmobilsoft.reactive.messaging.redis.streams.api;
+package hu.icellmobilsoft.reactive.messaging.redis.streams.quarkus;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Flow;
 import java.util.stream.StreamSupport;
 
-import jakarta.enterprise.context.ApplicationScoped;
 
+import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.api.StreamEntry;
 import io.quarkus.logging.Log;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.vertx.mutiny.redis.client.RedisAPI;
 import io.vertx.mutiny.redis.client.Response;
 
-@ApplicationScoped
 public class QuarkusRedisStreamsAdapter implements RedisStreams {
 
     private final RedisAPI redisAPI;

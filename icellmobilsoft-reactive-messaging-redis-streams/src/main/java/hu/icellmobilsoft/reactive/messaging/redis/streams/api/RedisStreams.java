@@ -3,7 +3,6 @@ package hu.icellmobilsoft.reactive.messaging.redis.streams.api;
 import java.util.List;
 import java.util.Map;
 
-import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 
 public interface RedisStreams {
