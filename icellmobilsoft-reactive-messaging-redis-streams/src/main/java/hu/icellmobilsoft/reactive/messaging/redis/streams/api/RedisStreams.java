@@ -11,6 +11,8 @@ public interface RedisStreams {
 
     String xGroupCreate(String stream, String group);
 
+    Uni<Integer> xAck(String stream, String group, String id);
+
     Uni<String> xAdd(String stream, String id, Map<String, String> fields);
 
     default Uni<String> xAdd(String stream, Map<String, String> fields) {

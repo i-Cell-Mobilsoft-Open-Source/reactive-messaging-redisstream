@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow;
 
 import jakarta.annotation.PostConstruct;
@@ -59,7 +60,13 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             Log.info(create);
         }
         return Multi.createBy().repeating().uni(() -> xReadMessage(redisAPI, incomingConfig)).indefinitely().flatMap(l -> Multi.createFrom().iterable(l)).filter(Objects::nonNull)
-                .invoke(r -> Log.infov("msg received: [{0}]", r)).map(Message::of);
+                .invoke(r -> Log.infov("msg received: [{0}]", r)).map(streamEntry ->
+                        Message.of(streamEntry, m -> ack(streamEntry, redisAPI, incomingConfig)));
+    }
+
+    private CompletionStage<Void> ack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
+        Uni<Integer> integerUni = redisAPI.xAck(incomingConfig.getStreamKey(), incomingConfig.getGroup(), streamEntry.id());
+        return integerUni.replaceWithVoid().subscribeAsCompletionStage();
     }
 
     private Uni<List<StreamEntry>> xReadMessage(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {

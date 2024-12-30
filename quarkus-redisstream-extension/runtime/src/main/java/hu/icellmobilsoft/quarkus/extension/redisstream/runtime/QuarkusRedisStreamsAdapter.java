@@ -43,6 +43,11 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
     }
 
     @Override
+    public Uni<Integer> xAck(String stream, String group, String id) {
+        return redisAPI.xack(List.of(stream, group, id)).map(Response::toInteger);
+    }
+
+    @Override
     public Uni<String> xAdd(String stream, String id, Map<String, String> fields) {
         List<String> xAddArgs = new ArrayList<>();
         xAddArgs.add(stream);
