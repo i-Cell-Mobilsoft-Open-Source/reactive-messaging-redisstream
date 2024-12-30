@@ -1,4 +1,4 @@
-package hu.icellmobilsoft.reactive.messaging.redis.streams.quarkus;
+package hu.icellmobilsoft.quarkus.extension.redisstream.runtime;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -6,7 +6,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.StreamSupport;
-
 
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.StreamEntry;

@@ -14,9 +14,8 @@ import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.eclipse.microprofile.reactive.messaging.spi.Connector;
 
-import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreamsProducer;
-import hu.icellmobilsoft.reactive.messaging.redis.streams.quarkus.QuarkusRedisStreamsProducer;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreamsProducer;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.StreamEntry;
 import io.quarkus.logging.Log;
 import io.smallrye.mutiny.Multi;
@@ -27,8 +26,8 @@ import io.smallrye.reactive.messaging.connector.OutboundConnector;
 import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
 
 @ApplicationScoped
-@Connector("icellmobilsoft-redis-streams")
-@ConnectorAttribute(name = "connection-key", description = "The redis connection key to use", defaultValue = RedisStreamsProducer.DEFAULT_CONNECTION_KEY, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
+@Connector(RedisStreamsConnector.ICELLMOBILSOFT_REDIS_STREAMS_CONNECTOR)
+@ConnectorAttribute(name = RedisStreamsConnector.REDIS_STREAM_CONNECTION_KEY_CONFIG, description = "The redis connection key to use", defaultValue = RedisStreamsProducer.DEFAULT_CONNECTION_KEY, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
 @ConnectorAttribute(name = "stream-key", description = "The Redis key holding the stream items", mandatory = true, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
 @ConnectorAttribute(name = "group", description = "The consumer group of the Redis stream to read from", mandatory = true, type = "string", direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xread-count", description = "COUNT parameter of XREADGROUP command", type = "int", defaultValue = "1", direction = ConnectorAttribute.Direction.INCOMING)
@@ -36,8 +35,10 @@ import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
 public class RedisStreamsConnector implements InboundConnector, OutboundConnector {
 
 
+    public static final String ICELLMOBILSOFT_REDIS_STREAMS_CONNECTOR = "icellmobilsoft-redis-streams";
+    public static final String REDIS_STREAM_CONNECTION_KEY_CONFIG = "connection-key";
     @Inject
-    protected QuarkusRedisStreamsProducer redisStreamsProducer;
+    protected RedisStreamsProducer redisStreamsProducer;
     private String consumer;
 
     @PostConstruct
