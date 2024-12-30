@@ -54,32 +54,25 @@ class RedisstreamExtensionProcessor {
     @BuildStep
     @Record(ExecutionTime.STATIC_INIT)
     SyntheticBeanBuildItem syntheticBean(List<RequestedRedisClientBuildItem> redisClients, RedisStreamsRecorder recorder) {
-        SyntheticBeanBuildItem.ExtendedBeanConfigurator redisStreamsProducer = SyntheticBeanBuildItem.configure(RedisStreamsProducer.class)
-                .scope(ApplicationScoped.class);
-        AnnotationInstance qualifier = AnnotationInstance.builder(Default.class).build();
+        SyntheticBeanBuildItem.ExtendedBeanConfigurator redisStreamsProducer = SyntheticBeanBuildItem.configure(RedisStreamsProducer.class).scope(ApplicationScoped.class);
         for (RequestedRedisClientBuildItem redisClient : redisClients) {
+            AnnotationInstance jandexQualifier;
             String name = redisClient.name;
             if (RedisConfig.DEFAULT_CLIENT_NAME.equals(name)) {
-                qualifier = AnnotationInstance.builder(Default.class).build();
+                jandexQualifier = AnnotationInstance.builder(Default.class).build();
             } else {
-                qualifier = AnnotationInstance.builder(RedisClientName.class).value(name).build();
+                jandexQualifier = AnnotationInstance.builder(RedisClientName.class).value(name).build();
             }
-            redisStreamsProducer.addInjectionPoint(ClassType.create(DotName.createSimple(RedisAPI.class))
-                    , qualifier);
+            // Add redisclients as injectionPoints to prevent removal
+            redisStreamsProducer.addInjectionPoint(ClassType.create(DotName.createSimple(RedisAPI.class)), jandexQualifier);
         }
 
-        return redisStreamsProducer
-                .unremovable()
-                .createWith(
-                        recorder.createWith()
-                )
-                .done();
+        return redisStreamsProducer.unremovable().createWith(recorder.createWith()).done();
     }
 
     static String channelPropertyFormat = "mp.messaging.%s.%s.%s";
 
     static String getChannelPropertyKey(String channelName, String propertyName, boolean incoming) {
-        return String.format(channelPropertyFormat, incoming ? "incoming" : "outgoing",
-                channelName.contains(".") ? "\"" + channelName + "\"" : channelName, propertyName);
+        return String.format(channelPropertyFormat, incoming ? "incoming" : "outgoing", channelName.contains(".") ? "\"" + channelName + "\"" : channelName, propertyName);
     }
 }
