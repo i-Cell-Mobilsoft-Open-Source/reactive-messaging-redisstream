@@ -70,7 +70,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     }
 
     private Multi<Message<StreamEntry>> xreadMulti(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
-        return Multi.createBy().repeating().uni(() -> xReadMessage(redisAPI, incomingConfig)).indefinitely().flatMap(l -> Multi.createFrom().iterable(l)).filter(Objects::nonNull)
+        return Multi.createBy().repeating().uni(() -> xReadMessage(redisAPI, incomingConfig)).indefinitely().flatMap(l -> Multi.createFrom().iterable(l))
+                .filter(Objects::nonNull)
+                .filter(this::notExpired)
                 .invoke(r -> Log.infov("msg received: [{0}]", r)).map(streamEntry ->
                         Message.of(streamEntry, m -> ack(streamEntry, redisAPI, incomingConfig)))
 //                .onFailure().retry().atMost(incomingConfig.getRetry())
@@ -79,6 +81,20 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                     return xreadMulti(redisAPI, incomingConfig);
                 })
                 ;
+    }
+
+    private boolean notExpired(StreamEntry streamEntry) {
+        if (streamEntry.fields() != null && !streamEntry.fields().isEmpty() && streamEntry.fields().containsKey("ttl")) {
+            String ttl = streamEntry.fields().get("ttl");
+            try {
+                Instant expirationTime = Instant.ofEpochMilli(Long.parseLong(ttl));
+                return expirationTime.isAfter(Instant.now());
+            } catch (NumberFormatException e) {
+                Log.warnv(e, "Could not parse ttl:[{0}] as epoch millis", ttl);
+                return true;
+            }
+        }
+        return true;
     }
 
     private CompletionStage<Void> ack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
