@@ -10,6 +10,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -19,6 +20,8 @@ public class MyMessagingApplication {
     @Inject
     @Channel("words-out")
     Emitter<String> emitter;
+
+    private int errorsFound = 0;
 
     /**
      * Sends message to the "words-out" channel, can be used from a JAX-RS resource or any bean of your application.
@@ -40,11 +43,13 @@ public class MyMessagingApplication {
     /**
      * Consume the message from the "words-in" channel, uppercase it and send it to the uppercase channel.
      * Messages come from the broker.
-     **/
+     *
+     * @return
+     */
     @Incoming("words-in")
-    @Outgoing("uppercase")
+//    @Outgoing("uppercase")
     @Blocking(ordered = false, value = "incoming-pool")
-    public Message<String> toUpperCase(Message<Object> message) {
+    public CompletionStage<Void> toUpperCase(Message<Object> message) {
         Log.infov("Message received: [{0}]", message.getPayload());
         for (Object metadata : message.getMetadata()) {
             Log.infov("metadata: [{0}]", message.getPayload());
@@ -55,15 +60,21 @@ public class MyMessagingApplication {
             Thread.currentThread().interrupt();
         }
         if (message.getPayload() != null) {
-            return message.withPayload(message.getPayload().toString().toUpperCase());
+            if (message.getPayload().toString().contains("error")) {
+                errorsFound++;
+                Log.errorv("Error: [{0}]", errorsFound);
+                if (errorsFound % 5 != 0) {
+                    return message.nack(new RuntimeException("Error"));
+                }
+            }
         }
-        return message.withPayload("Hello");
+        return message.ack();
     }
 
     /**
      * Consume the uppercase channel (in-memory) and print the messages.
      **/
-    @Incoming("uppercase")
+//    @Incoming("uppercase")
     public void sink(String word) {
         Log.info(word);
     }

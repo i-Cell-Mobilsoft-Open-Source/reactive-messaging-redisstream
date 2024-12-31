@@ -2,6 +2,7 @@ package hu.icellmobilsoft.reactive.messaging.redis.streams;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -34,10 +35,11 @@ import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
 @ConnectorAttribute(name = "stream-key", description = "The Redis key holding the stream items", mandatory = true, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
 @ConnectorAttribute(name = "group", description = "The consumer group of the Redis stream to read from", mandatory = true, type = "string", direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xread-count", description = "The maximum number of entries to receive upon an XREADGROUP call", type = "int", defaultValue = "1", direction = ConnectorAttribute.Direction.INCOMING)
-@ConnectorAttribute(name = "xread-block-ms", description = "The milliseconds to block in an XREADGROUP call", type = "int", defaultValue = "5000", direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "retry", description = "The number of times the  consumer should retry", type = "int", defaultValue = "1", direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "xread-block-ms", description = "The milliseconds to wait in an XREADGROUP call", type = "int", defaultValue = "5000", direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xadd-maxlen", description = "The maximum number of entries to keep in the stream", type = "int", direction = ConnectorAttribute.Direction.OUTGOING)
 @ConnectorAttribute(name = "xadd-exact-maxlen", description = "Use exact trimming for MAXLEN parameter", type = "boolean", defaultValue = "false", direction = ConnectorAttribute.Direction.OUTGOING)
-@ConnectorAttribute(name = "xadd-ttl-sec", description = "Seconds to keep an entry in the stream", type = "int", direction = ConnectorAttribute.Direction.OUTGOING)
+@ConnectorAttribute(name = "xadd-ttl-ms", description = "Milliseconds to keep an entry in the stream", type = "long", direction = ConnectorAttribute.Direction.OUTGOING)
 public class RedisStreamsConnector implements InboundConnector, OutboundConnector {
 
 
@@ -64,9 +66,19 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             String create = redisAPI.xGroupCreate(streamKey, group);
             Log.info(create);
         }
+        return xreadMulti(redisAPI, incomingConfig);
+    }
+
+    private Multi<Message<StreamEntry>> xreadMulti(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         return Multi.createBy().repeating().uni(() -> xReadMessage(redisAPI, incomingConfig)).indefinitely().flatMap(l -> Multi.createFrom().iterable(l)).filter(Objects::nonNull)
                 .invoke(r -> Log.infov("msg received: [{0}]", r)).map(streamEntry ->
-                        Message.of(streamEntry, m -> ack(streamEntry, redisAPI, incomingConfig)));
+                        Message.of(streamEntry, m -> ack(streamEntry, redisAPI, incomingConfig)))
+//                .onFailure().retry().atMost(incomingConfig.getRetry())
+                .onFailure().recoverWithMulti(error -> {
+                    Log.error("Uncaught exception while processing messages, trying to recover..", error);
+                    return xreadMulti(redisAPI, incomingConfig);
+                })
+                ;
     }
 
     private CompletionStage<Void> ack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
@@ -76,28 +88,43 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
 
     private Uni<List<StreamEntry>> xReadMessage(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         return redisAPI.xReadGroup(incomingConfig.getStreamKey(), incomingConfig.getGroup(), consumer, incomingConfig.getXreadCount(), incomingConfig.getXreadBlockMs())
-                .invoke(r -> Log.infov("XREADGROUP called with response: [{0}]", r)).onCancellation().invoke(() -> Log.infov("XREADGROUP cancelled"));
+                .invoke(r -> Log.infov("XREADGROUP called with response: [{0}]", r)).onCancellation().invoke(() -> Log.infov("XREADGROUP cancelled"))
+                ;
     }
 
     @Override
     public Flow.Subscriber<? extends Message<?>> getSubscriber(Config config) {
         RedisStreamsConnectorOutgoingConfiguration outgoingConfig = new RedisStreamsConnectorOutgoingConfiguration(config);
         RedisStreams redisAPI = redisStreamsProducer.produce(outgoingConfig.getConnectionKey());
-        if(outgoingConfig.getXaddMaxlen().isPresent() && outgoingConfig.getXaddTtlSec().isPresent()) {
-            Log.warnv("When both xadd-maxlen and xadd-ttl-sec is set only maxlen will be used!");
+        Optional<Long> ttlMsOpt = outgoingConfig.getXaddTtlMs();
+        if (outgoingConfig.getXaddMaxlen().isPresent() && ttlMsOpt.isPresent()) {
+            Log.warnv("When both xadd-maxlen and xadd-ttl-ms is set only maxlen will be used!");
         }
         return MultiUtils.via(multi -> multi.onItem().transformToUniAndConcatenate(message -> {
                             Log.infov("msg sent:[{0}]", message.getPayload());
-                            String minId = outgoingConfig.getXaddTtlSec().map(this::toMinId).orElse(null);
+                            String minId = null;
+                            String fieldTtl = null;
+                            if (ttlMsOpt.isPresent()) {
+                                Long ttlMs = ttlMsOpt.get();
+                                Long epochMilli = Instant.now().toEpochMilli();
+                                // current message's business ttl (now + ttl)
+                                fieldTtl = String.valueOf(epochMilli + ttlMs);
+                                // last not expired id (now - ttl)
+                                minId = String.valueOf(epochMilli - ttlMs);
+                            }
+                            Map<String, String> streamEntryFields = new HashMap<>();
+                            //TODO json??
+                            streamEntryFields.put("message", message.getPayload().toString());
+                            if (fieldTtl != null) {
+                                streamEntryFields.put("ttl", fieldTtl);
+                            }
+                            //TODO sid
+                            // streamEntryFields.put("extSessionId", MDC.get());
                             return redisAPI.xAdd(outgoingConfig.getStreamKey(), "*", outgoingConfig.getXaddMaxlen().orElse(null), outgoingConfig.getXaddExactMaxlen(), minId,
-                                    Map.of("payload", message.getPayload().toString(), "timestamp", LocalDateTime.now().toString()));
+                                    streamEntryFields);
                         }
                 )
         );
-    }
-
-    private String toMinId(Integer ttlSec) {
-        return String.valueOf(Instant.now().minusSeconds(ttlSec).toEpochMilli());
     }
 
 }

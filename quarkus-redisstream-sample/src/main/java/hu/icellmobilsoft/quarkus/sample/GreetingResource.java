@@ -26,4 +26,13 @@ public class GreetingResource {
         eventAction.sendMessage(message);
         return message;
     }
+
+    @GET
+    @Path("/error")
+    @Produces(MediaType.TEXT_PLAIN)
+    public String error() {
+        String message = "error";
+        eventAction.sendMessage(message);
+        return message;
+    }
 }
