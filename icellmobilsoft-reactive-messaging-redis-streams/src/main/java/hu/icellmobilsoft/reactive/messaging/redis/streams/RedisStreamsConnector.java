@@ -51,6 +51,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
 
     @PostConstruct
     void init() {
+        //TODO random
         this.consumer = "consumer";
     }
 
@@ -75,6 +76,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .filter(this::notExpired)
                 .invoke(r -> Log.infov("msg received: [{0}]", r)).map(streamEntry ->
                         Message.of(streamEntry, m -> ack(streamEntry, redisAPI, incomingConfig)))
+                //TODO itt valami el van baszva
 //                .onFailure().retry().atMost(incomingConfig.getRetry())
                 .onFailure().recoverWithMulti(error -> {
                     Log.error("Uncaught exception while processing messages, trying to recover..", error);
