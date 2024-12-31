@@ -15,9 +15,7 @@ public interface RedisStreams {
 
     Uni<String> xAdd(String stream, String id, Map<String, String> fields);
 
-    default Uni<String> xAdd(String stream, Map<String, String> fields) {
-        return xAdd(stream, "*", fields);
-    }
+    Uni<String> xAdd(String stream, String id, Integer maxLen, Boolean exact, String minId, Map<String, String> fields);
 
     Uni<List<StreamEntry>> xReadGroup(String stream, String group, String consumer, Integer count, Integer blockMs);
 

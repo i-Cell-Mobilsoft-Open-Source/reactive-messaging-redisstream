@@ -49,14 +49,30 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
 
     @Override
     public Uni<String> xAdd(String stream, String id, Map<String, String> fields) {
+        return xAdd(stream, id, null, null, null, fields);
+    }
+
+    @Override
+    public Uni<String> xAdd(String stream, String id, Integer maxLen, Boolean exact, String minId, Map<String, String> fields) {
         List<String> xAddArgs = new ArrayList<>();
         xAddArgs.add(stream);
+
+        if (maxLen != null) {
+            xAddArgs.add("MAXLEN");
+            if (!Boolean.TRUE.equals(exact)) {
+                xAddArgs.add("~");
+            }
+            xAddArgs.add(maxLen.toString());
+        } else if (minId != null) {
+            xAddArgs.add("MINID");
+            xAddArgs.add(minId);
+        }
+
         xAddArgs.add(id);
         fields.forEach((key, value) -> {
             xAddArgs.add(key);
             xAddArgs.add(value);
         });
-
         return redisAPI.xadd(xAddArgs).map(Response::toString);
     }
 

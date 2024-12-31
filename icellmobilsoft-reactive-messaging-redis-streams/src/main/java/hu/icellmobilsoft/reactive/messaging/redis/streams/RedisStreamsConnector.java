@@ -1,9 +1,11 @@
 package hu.icellmobilsoft.reactive.messaging.redis.streams;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow;
 
@@ -31,8 +33,11 @@ import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
 @ConnectorAttribute(name = RedisStreamsConnector.REDIS_STREAM_CONNECTION_KEY_CONFIG, description = "The redis connection key to use", defaultValue = RedisStreamsProducer.DEFAULT_CONNECTION_KEY, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
 @ConnectorAttribute(name = "stream-key", description = "The Redis key holding the stream items", mandatory = true, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
 @ConnectorAttribute(name = "group", description = "The consumer group of the Redis stream to read from", mandatory = true, type = "string", direction = ConnectorAttribute.Direction.INCOMING)
-@ConnectorAttribute(name = "xread-count", description = "COUNT parameter of XREADGROUP command", type = "int", defaultValue = "1", direction = ConnectorAttribute.Direction.INCOMING)
-@ConnectorAttribute(name = "xread-block-ms", description = "BLOCK parameter of XREADGROUP command", type = "int", defaultValue = "5000", direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "xread-count", description = "The maximum number of entries to receive upon an XREADGROUP call", type = "int", defaultValue = "1", direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "xread-block-ms", description = "The milliseconds to block in an XREADGROUP call", type = "int", defaultValue = "5000", direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "xadd-maxlen", description = "The maximum number of entries to keep in the stream", type = "int", direction = ConnectorAttribute.Direction.OUTGOING)
+@ConnectorAttribute(name = "xadd-exact-maxlen", description = "Use exact trimming for MAXLEN parameter", type = "boolean", defaultValue = "false", direction = ConnectorAttribute.Direction.OUTGOING)
+@ConnectorAttribute(name = "xadd-ttl-sec", description = "Seconds to keep an entry in the stream", type = "int", direction = ConnectorAttribute.Direction.OUTGOING)
 public class RedisStreamsConnector implements InboundConnector, OutboundConnector {
 
 
@@ -78,12 +83,21 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     public Flow.Subscriber<? extends Message<?>> getSubscriber(Config config) {
         RedisStreamsConnectorOutgoingConfiguration outgoingConfig = new RedisStreamsConnectorOutgoingConfiguration(config);
         RedisStreams redisAPI = redisStreamsProducer.produce(outgoingConfig.getConnectionKey());
+        if(outgoingConfig.getXaddMaxlen().isPresent() && outgoingConfig.getXaddTtlSec().isPresent()) {
+            Log.warnv("When both xadd-maxlen and xadd-ttl-sec is set only maxlen will be used!");
+        }
         return MultiUtils.via(multi -> multi.onItem().transformToUniAndConcatenate(message -> {
                             Log.infov("msg sent:[{0}]", message.getPayload());
-                            return redisAPI.xAdd(outgoingConfig.getStreamKey(), Map.of("payload", message.getPayload().toString(), "timestamp", LocalDateTime.now().toString()));
+                            String minId = outgoingConfig.getXaddTtlSec().map(this::toMinId).orElse(null);
+                            return redisAPI.xAdd(outgoingConfig.getStreamKey(), "*", outgoingConfig.getXaddMaxlen().orElse(null), outgoingConfig.getXaddExactMaxlen(), minId,
+                                    Map.of("payload", message.getPayload().toString(), "timestamp", LocalDateTime.now().toString()));
                         }
                 )
         );
+    }
+
+    private String toMinId(Integer ttlSec) {
+        return String.valueOf(Instant.now().minusSeconds(ttlSec).toEpochMilli());
     }
 
 }
