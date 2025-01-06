@@ -49,26 +49,22 @@ public class MyMessagingApplication {
     @Incoming("words-in")
 //    @Outgoing("uppercase")
     @Blocking(ordered = false, value = "incoming-pool")
-    public CompletionStage<Void> toUpperCase(Message<Object> message) {
-        Log.infov("Message received: [{0}]", message.getPayload());
-        for (Object metadata : message.getMetadata()) {
-            Log.infov("metadata: [{0}]", message.getPayload());
-        }
+    public void toUpperCase(Object message) {
+        Log.infov("Message received: [{0}]", message);
         try {
             TimeUnit.MILLISECONDS.sleep(2000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        if (message.getPayload() != null) {
-            if (message.getPayload().toString().contains("error")) {
+        if (message != null) {
+            if (message.toString().contains("error")) {
                 errorsFound++;
                 Log.errorv("Error: [{0}]", errorsFound);
                 if (errorsFound % 5 != 0) {
-                    return message.nack(new RuntimeException("Error"));
+                    throw new RuntimeException("Error");
                 }
             }
         }
-        return message.ack();
     }
 
     /**

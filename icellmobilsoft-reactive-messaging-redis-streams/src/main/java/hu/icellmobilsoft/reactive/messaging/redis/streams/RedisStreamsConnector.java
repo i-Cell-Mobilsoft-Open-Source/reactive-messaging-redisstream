@@ -2,32 +2,41 @@ package hu.icellmobilsoft.reactive.messaging.redis.streams;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.eclipse.microprofile.reactive.messaging.spi.Connector;
+import org.jboss.logging.MDC;
 
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreamsProducer;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.StreamEntry;
 import io.quarkus.logging.Log;
+import io.quarkus.runtime.ShutdownEvent;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.reactive.messaging.annotations.ConnectorAttribute;
 import io.smallrye.reactive.messaging.connector.InboundConnector;
 import io.smallrye.reactive.messaging.connector.OutboundConnector;
 import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
+import io.vertx.redis.client.impl.types.ErrorType;
 
 @ApplicationScoped
 @Connector(RedisStreamsConnector.ICELLMOBILSOFT_REDIS_STREAMS_CONNECTOR)
@@ -48,11 +57,19 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     @Inject
     protected RedisStreamsProducer redisStreamsProducer;
     private String consumer;
+    private volatile boolean consumerCancelled = false;
+    private final List<Flow.Subscription> subscriptions = new CopyOnWriteArrayList<>();
 
     @PostConstruct
     void init() {
         //TODO random
         this.consumer = "consumer";
+    }
+
+    void close(@Observes ShutdownEvent ignored) {
+        // lezárjuk a subscription-öket, különben a quarkus kiüti alóluk a redis connection-t
+        subscriptions.forEach(Flow.Subscription::cancel);
+        consumerCancelled = true;
     }
 
 
@@ -67,22 +84,26 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             String create = redisAPI.xGroupCreate(streamKey, group);
             Log.info(create);
         }
-        return xreadMulti(redisAPI, incomingConfig);
+        return xreadMulti(redisAPI, incomingConfig).onSubscription().invoke(subscriptions::add);
     }
 
     private Multi<Message<StreamEntry>> xreadMulti(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
-        return Multi.createBy().repeating().uni(() -> xReadMessage(redisAPI, incomingConfig)).indefinitely().flatMap(l -> Multi.createFrom().iterable(l))
+        return Multi.createBy().repeating().uni(() -> xReadMessage(redisAPI, incomingConfig)).indefinitely()
+                .flatMap(l -> Multi.createFrom().iterable(l))
                 .filter(Objects::nonNull)
                 .filter(this::notExpired)
                 .invoke(r -> Log.infov("msg received: [{0}]", r)).map(streamEntry ->
                         Message.of(streamEntry, m -> ack(streamEntry, redisAPI, incomingConfig)))
-                //TODO itt valami el van baszva
-//                .onFailure().retry().atMost(incomingConfig.getRetry())
-                .onFailure().recoverWithMulti(error -> {
+                .onFailure(t -> !consumerCancelled).recoverWithMulti(error -> {
                     Log.error("Uncaught exception while processing messages, trying to recover..", error);
                     return xreadMulti(redisAPI, incomingConfig);
                 })
-                ;
+                .onCancellation()
+                .invoke(() -> {
+                    consumerCancelled = true;
+                    Log.infov("Cancellation detected");
+                });
+
     }
 
     private boolean notExpired(StreamEntry streamEntry) {
@@ -101,12 +122,22 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
 
     private CompletionStage<Void> ack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         Uni<Integer> integerUni = redisAPI.xAck(incomingConfig.getStreamKey(), incomingConfig.getGroup(), streamEntry.id());
-        return integerUni.replaceWithVoid().subscribeAsCompletionStage();
+        return integerUni.onFailure().recoverWithItem(throwable -> {
+            Log.errorv(throwable, "ACK failed for entry:[{0}]", streamEntry.id(), throwable);
+            return null;
+        }).replaceWithVoid().subscribeAsCompletionStage();
     }
 
     private Uni<List<StreamEntry>> xReadMessage(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         return redisAPI.xReadGroup(incomingConfig.getStreamKey(), incomingConfig.getGroup(), consumer, incomingConfig.getXreadCount(), incomingConfig.getXreadBlockMs())
-                .invoke(r -> Log.infov("XREADGROUP called with response: [{0}]", r)).onCancellation().invoke(() -> Log.infov("XREADGROUP cancelled"))
+                .invoke(r -> Log.infov("XREADGROUP called with response: [{0}]", r))
+                .onFailure(ErrorType.class)
+                .recoverWithItem(e ->
+                        {
+                            Log.errorv(e, "Redis error occured, [{0}]", e.getMessage());
+                            return Collections.emptyList();
+                        }
+                )
                 ;
     }
 
