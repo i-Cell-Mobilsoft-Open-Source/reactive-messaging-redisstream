@@ -1,6 +1,8 @@
 package hu.icellmobilsoft.reactive.messaging.redis.streams;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -100,14 +102,20 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .invoke(r -> Log.tracev("Message received from redis-stream: [{0}]", r))
                 .filter(this::notExpired)
                 .map(streamEntry -> ContextAwareMessage.of(streamEntry).withAck(() -> ack(streamEntry, redisAPI, incomingConfig)))
-                .onFailure(t -> !consumerCancelled)
-                .recoverWithMulti(error -> {
-                    Log.errorv(
-                            error,
-                            "Uncaught exception while processing messages from channel [{0}], trying to recover..",
-                            incomingConfig.getChannel());
-                    return xreadMulti(redisAPI, incomingConfig);
+                .onFailure(t -> {
+                    if (consumerCancelled) {
+                        Log.infov(t, "Exception occured on already cancelled channel:[{0}], skipping retry", incomingConfig.getChannel());
+                    } else {
+                        Log.errorv(
+                                t,
+                                "Uncaught exception while processing messages from channel [{0}], trying to recover..",
+                                incomingConfig.getChannel());
+                    }
+                    return !consumerCancelled;
                 })
+                .retry()
+                .withBackOff(Duration.of(1, ChronoUnit.SECONDS), Duration.of(30, ChronoUnit.SECONDS))
+                .indefinitely()
                 .onCancellation()
                 .invoke(() -> {
                     consumerCancelled = true;
