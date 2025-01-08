@@ -10,7 +10,6 @@ import java.util.stream.StreamSupport;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.StreamEntry;
 import io.quarkus.logging.Log;
-import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.vertx.mutiny.redis.client.RedisAPI;
 import io.vertx.mutiny.redis.client.Response;
@@ -26,12 +25,13 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
     @Override
     public boolean existGroup(String stream, String group) {
         try {
+            Log.tracev("Checking consumer group [{0}] on stream [{1}]", group, stream);
             Response groups = redisAPI.xinfoAndAwait(List.of("GROUPS", stream));
             return StreamSupport.stream(groups.spliterator(), false).map(r -> r.get("name")).map(Response::toString).anyMatch(group::equals);
         } catch (Exception e) {
             // ha nincs kulcs akkor a kovetkezo hiba jon:
             // redis.clients.jedis.exceptions.JedisDataException: ERR no such key
-            Log.infov("Redis exception duringchecking group [{0}] on stream [{1}]: [{2}]", group, stream, e.getLocalizedMessage());
+            Log.debugv("Redis exception during checking group [{0}] on stream [{1}]: [{2}]", group, stream, e.getLocalizedMessage());
             return false;
         }
     }
@@ -73,6 +73,7 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
             xAddArgs.add(key);
             xAddArgs.add(value);
         });
+        Log.tracev("Calling redis command XADD with args:[{0}]", xAddArgs);
         return redisAPI.xadd(xAddArgs).map(Response::toString);
     }
 
@@ -94,12 +95,9 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
         xReadArgs.add(stream);
         xReadArgs.add(">");
 
+        Log.tracev("Calling redis command XREADGROUP with args:[{0}]", xReadArgs);
         return redisAPI.xreadgroup(xReadArgs).map(this::parseXReadResponse);
 
-    }
-
-    private Multi<StreamEntry> processXReadResponse(Response response) {
-        return Multi.createFrom().iterable(parseXReadResponse(response));
     }
 
     private List<StreamEntry> parseXReadResponse(Response response) {
