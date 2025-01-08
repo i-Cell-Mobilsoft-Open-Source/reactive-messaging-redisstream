@@ -36,6 +36,7 @@ import io.smallrye.reactive.messaging.annotations.ConnectorAttribute;
 import io.smallrye.reactive.messaging.connector.InboundConnector;
 import io.smallrye.reactive.messaging.connector.OutboundConnector;
 import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
+import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
 import io.vertx.redis.client.impl.types.ErrorType;
 
 @ApplicationScoped
@@ -93,7 +94,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .filter(Objects::nonNull)
                 .filter(this::notExpired)
                 .invoke(r -> Log.infov("msg received: [{0}]", r)).map(streamEntry ->
-                        Message.of(streamEntry, m -> ack(streamEntry, redisAPI, incomingConfig)))
+                        ContextAwareMessage.of(streamEntry).withAck(() -> ack(streamEntry, redisAPI, incomingConfig)))
                 .onFailure(t -> !consumerCancelled).recoverWithMulti(error -> {
                     Log.error("Uncaught exception while processing messages, trying to recover..", error);
                     return xreadMulti(redisAPI, incomingConfig);
