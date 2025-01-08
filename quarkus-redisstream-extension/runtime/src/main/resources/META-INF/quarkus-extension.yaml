@@ -8,7 +8,7 @@ metadata:
     - "redis"
     - "redisstream"
     - "reactive-redisstream"
-#  guide: ... # To create and publish this guide, see https://github.com/quarkiverse/quarkiverse/wiki#documenting-your-extension
+  #  guide: ... # To create and publish this guide, see https://github.com/quarkiverse/quarkiverse/wiki#documenting-your-extension
   categories:
     - "messaging"
   status: "experimental"

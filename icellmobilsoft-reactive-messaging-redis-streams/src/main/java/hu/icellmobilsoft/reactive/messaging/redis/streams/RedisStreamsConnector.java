@@ -1,21 +1,17 @@
 package hu.icellmobilsoft.reactive.messaging.redis.streams;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
@@ -23,7 +19,6 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.eclipse.microprofile.reactive.messaging.spi.Connector;
-import org.jboss.logging.MDC;
 
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreamsProducer;
@@ -41,17 +36,25 @@ import io.vertx.redis.client.impl.types.ErrorType;
 
 @ApplicationScoped
 @Connector(RedisStreamsConnector.ICELLMOBILSOFT_REDIS_STREAMS_CONNECTOR)
-@ConnectorAttribute(name = RedisStreamsConnector.REDIS_STREAM_CONNECTION_KEY_CONFIG, description = "The redis connection key to use", defaultValue = RedisStreamsProducer.DEFAULT_CONNECTION_KEY, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
-@ConnectorAttribute(name = "stream-key", description = "The Redis key holding the stream items", mandatory = true, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
-@ConnectorAttribute(name = "group", description = "The consumer group of the Redis stream to read from", mandatory = true, type = "string", direction = ConnectorAttribute.Direction.INCOMING)
-@ConnectorAttribute(name = "xread-count", description = "The maximum number of entries to receive upon an XREADGROUP call", type = "int", defaultValue = "1", direction = ConnectorAttribute.Direction.INCOMING)
-@ConnectorAttribute(name = "retry", description = "The number of times the  consumer should retry", type = "int", defaultValue = "1", direction = ConnectorAttribute.Direction.INCOMING)
-@ConnectorAttribute(name = "xread-block-ms", description = "The milliseconds to wait in an XREADGROUP call", type = "int", defaultValue = "5000", direction = ConnectorAttribute.Direction.INCOMING)
-@ConnectorAttribute(name = "xadd-maxlen", description = "The maximum number of entries to keep in the stream", type = "int", direction = ConnectorAttribute.Direction.OUTGOING)
-@ConnectorAttribute(name = "xadd-exact-maxlen", description = "Use exact trimming for MAXLEN parameter", type = "boolean", defaultValue = "false", direction = ConnectorAttribute.Direction.OUTGOING)
-@ConnectorAttribute(name = "xadd-ttl-ms", description = "Milliseconds to keep an entry in the stream", type = "long", direction = ConnectorAttribute.Direction.OUTGOING)
+@ConnectorAttribute(name = RedisStreamsConnector.REDIS_STREAM_CONNECTION_KEY_CONFIG, description = "The redis connection key to use",
+        defaultValue = RedisStreamsProducer.DEFAULT_CONNECTION_KEY, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
+@ConnectorAttribute(name = "stream-key", description = "The Redis key holding the stream items", mandatory = true, type = "string",
+        direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
+@ConnectorAttribute(name = "group", description = "The consumer group of the Redis stream to read from", mandatory = true, type = "string",
+        direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "xread-count", description = "The maximum number of entries to receive upon an XREADGROUP call", type = "int",
+        defaultValue = "1", direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "retry", description = "The number of times the  consumer should retry", type = "int", defaultValue = "1",
+        direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "xread-block-ms", description = "The milliseconds to wait in an XREADGROUP call", type = "int", defaultValue = "5000",
+        direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "xadd-maxlen", description = "The maximum number of entries to keep in the stream", type = "int",
+        direction = ConnectorAttribute.Direction.OUTGOING)
+@ConnectorAttribute(name = "xadd-exact-maxlen", description = "Use exact trimming for MAXLEN parameter", type = "boolean", defaultValue = "false",
+        direction = ConnectorAttribute.Direction.OUTGOING)
+@ConnectorAttribute(name = "xadd-ttl-ms", description = "Milliseconds to keep an entry in the stream", type = "long",
+        direction = ConnectorAttribute.Direction.OUTGOING)
 public class RedisStreamsConnector implements InboundConnector, OutboundConnector {
-
 
     public static final String ICELLMOBILSOFT_REDIS_STREAMS_CONNECTOR = "icellmobilsoft-redis-streams";
     public static final String REDIS_STREAM_CONNECTION_KEY_CONFIG = "connection-key";
@@ -63,7 +66,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
 
     @PostConstruct
     void init() {
-        //TODO random
+        // TODO random
         this.consumer = "consumer";
     }
 
@@ -72,7 +75,6 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         subscriptions.forEach(Flow.Subscription::cancel);
         consumerCancelled = true;
     }
-
 
     @Override
     public Flow.Publisher<? extends Message<?>> getPublisher(Config config) {
@@ -89,13 +91,17 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     }
 
     private Multi<Message<StreamEntry>> xreadMulti(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
-        return Multi.createBy().repeating().uni(() -> xReadMessage(redisAPI, incomingConfig)).indefinitely()
+        return Multi.createBy()
+                .repeating()
+                .uni(() -> xReadMessage(redisAPI, incomingConfig))
+                .indefinitely()
                 .flatMap(l -> Multi.createFrom().iterable(l))
                 .filter(Objects::nonNull)
                 .filter(this::notExpired)
-                .invoke(r -> Log.infov("msg received: [{0}]", r)).map(streamEntry ->
-                        ContextAwareMessage.of(streamEntry).withAck(() -> ack(streamEntry, redisAPI, incomingConfig)))
-                .onFailure(t -> !consumerCancelled).recoverWithMulti(error -> {
+                .invoke(r -> Log.infov("msg received: [{0}]", r))
+                .map(streamEntry -> ContextAwareMessage.of(streamEntry).withAck(() -> ack(streamEntry, redisAPI, incomingConfig)))
+                .onFailure(t -> !consumerCancelled)
+                .recoverWithMulti(error -> {
                     Log.error("Uncaught exception while processing messages, trying to recover..", error);
                     return xreadMulti(redisAPI, incomingConfig);
                 })
@@ -130,16 +136,20 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     }
 
     private Uni<List<StreamEntry>> xReadMessage(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
-        return redisAPI.xReadGroup(incomingConfig.getStreamKey(), incomingConfig.getGroup(), consumer, incomingConfig.getXreadCount(), incomingConfig.getXreadBlockMs())
+        return redisAPI
+                .xReadGroup(
+                        incomingConfig.getStreamKey(),
+                        incomingConfig.getGroup(),
+                        consumer,
+                        incomingConfig.getXreadCount(),
+                        incomingConfig.getXreadBlockMs())
                 .invoke(r -> Log.infov("XREADGROUP called with response: [{0}]", r))
                 .onFailure(ErrorType.class)
-                .recoverWithItem(e ->
-                        {
-                            Log.errorv(e, "Redis error occured, [{0}]", e.getMessage());
-                            return Collections.emptyList();
-                        }
-                )
-                ;
+                .recoverWithItem(e -> {
+                    Log.errorv(e, "Redis error occured, [{0}]", e.getMessage());
+                    return Collections.emptyList();
+                }
+                );
     }
 
     @Override
@@ -151,29 +161,34 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             Log.warnv("When both xadd-maxlen and xadd-ttl-ms is set only maxlen will be used!");
         }
         return MultiUtils.via(multi -> multi.onItem().transformToUniAndConcatenate(message -> {
-                            Log.infov("msg sent:[{0}]", message.getPayload());
-                            String minId = null;
-                            String fieldTtl = null;
-                            if (ttlMsOpt.isPresent()) {
-                                Long ttlMs = ttlMsOpt.get();
-                                Long epochMilli = Instant.now().toEpochMilli();
-                                // current message's business ttl (now + ttl)
-                                fieldTtl = String.valueOf(epochMilli + ttlMs);
-                                // last not expired id (now - ttl)
-                                minId = String.valueOf(epochMilli - ttlMs);
-                            }
-                            Map<String, String> streamEntryFields = new HashMap<>();
-                            //TODO json??
-                            streamEntryFields.put("message", message.getPayload().toString());
-                            if (fieldTtl != null) {
-                                streamEntryFields.put("ttl", fieldTtl);
-                            }
-                            //TODO sid
-                            // streamEntryFields.put("extSessionId", MDC.get());
-                            return redisAPI.xAdd(outgoingConfig.getStreamKey(), "*", outgoingConfig.getXaddMaxlen().orElse(null), outgoingConfig.getXaddExactMaxlen(), minId,
-                                    streamEntryFields);
-                        }
-                )
+            Log.infov("msg sent:[{0}]", message.getPayload());
+            String minId = null;
+            String fieldTtl = null;
+            if (ttlMsOpt.isPresent()) {
+                Long ttlMs = ttlMsOpt.get();
+                Long epochMilli = Instant.now().toEpochMilli();
+                // current message's business ttl (now + ttl)
+                fieldTtl = String.valueOf(epochMilli + ttlMs);
+                // last not expired id (now - ttl)
+                minId = String.valueOf(epochMilli - ttlMs);
+            }
+            Map<String, String> streamEntryFields = new HashMap<>();
+            // TODO json??
+            streamEntryFields.put("message", message.getPayload().toString());
+            if (fieldTtl != null) {
+                streamEntryFields.put("ttl", fieldTtl);
+            }
+            // TODO sid
+            // streamEntryFields.put("extSessionId", MDC.get());
+            return redisAPI.xAdd(
+                    outgoingConfig.getStreamKey(),
+                    "*",
+                    outgoingConfig.getXaddMaxlen().orElse(null),
+                    outgoingConfig.getXaddExactMaxlen(),
+                    minId,
+                    streamEntryFields);
+        }
+        )
         );
     }
 

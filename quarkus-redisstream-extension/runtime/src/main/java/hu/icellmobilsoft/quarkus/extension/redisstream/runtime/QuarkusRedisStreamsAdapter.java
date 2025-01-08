@@ -136,5 +136,4 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
         return new StreamEntry(streamKey, entryId, fields);
     }
 
-
 }

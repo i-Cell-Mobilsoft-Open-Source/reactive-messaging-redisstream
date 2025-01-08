@@ -1,8 +1,6 @@
 package hu.icellmobilsoft.quarkus.extension.redisstream.runtime;
 
 import java.lang.annotation.Annotation;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.Function;
 
 import jakarta.enterprise.inject.Default;
