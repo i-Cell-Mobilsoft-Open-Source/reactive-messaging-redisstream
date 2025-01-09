@@ -3,7 +3,6 @@ package hu.icellmobilsoft.reactive.messaging.redis.streams;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,11 +62,16 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
 
     public static final String ICELLMOBILSOFT_REDIS_STREAMS_CONNECTOR = "icellmobilsoft-redis-streams";
     public static final String REDIS_STREAM_CONNECTION_KEY_CONFIG = "connection-key";
-    @Inject
-    protected RedisStreamsProducer redisStreamsProducer;
+    private final RedisStreamsProducer redisStreamsProducer;
     private String consumer;
     private volatile boolean consumerCancelled = false;
+    private volatile boolean logSubscription = true;
     private final List<Flow.Subscription> subscriptions = new CopyOnWriteArrayList<>();
+
+    @Inject
+    public RedisStreamsConnector(RedisStreamsProducer redisStreamsProducer) {
+        this.redisStreamsProducer = redisStreamsProducer;
+    }
 
     @PostConstruct
     void init() {
@@ -101,7 +105,21 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .indefinitely()
                 .flatMap(l -> Multi.createFrom().iterable(l))
                 .filter(Objects::nonNull)
-                .invoke(r -> Log.tracev("Message received from redis-stream: [{0}]", r))
+                .invoke(r -> Log.tracev("Message received from redis-stream: [{0}]", r)
+                )
+                .onSubscription()
+                .invoke(() -> {
+                    if (logSubscription) {
+                        Log.infov(
+                                "Subscribing channel [{0}] to redis stream [{1}] consuming group [{2}] as consumer [{3}] using redis connection key [{4}]",
+                                incomingConfig.getChannel(),
+                                incomingConfig.getStreamKey(),
+                                incomingConfig.getGroup(),
+                                consumer,
+                                incomingConfig.getConnectionKey());
+                        logSubscription = false;
+                    }
+                })
                 .filter(this::notExpired)
                 .map(streamEntry -> toMessage(redisAPI, incomingConfig, streamEntry))
                 .onFailure(t -> {
@@ -112,6 +130,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                                 t,
                                 "Uncaught exception while processing messages from channel [{0}], trying to recover..",
                                 incomingConfig.getChannel());
+                        logSubscription = true;
                     }
                     return !consumerCancelled;
                 })
@@ -188,14 +207,11 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                         incomingConfig.getXreadBlockMs())
                 // Redis connection error while waiting for XREADGROUP response
                 .onFailure(ErrorType.class)
-                .recoverWithItem(e -> {
-                    Log.errorv(
-                            e,
-                            "Redis error occured while waiting for XREADGROUP on channel [{0}], error: [{1}]",
-                            incomingConfig.getChannel(),
-                            e.getMessage());
-                    return Collections.emptyList();
-                }
+                .invoke(e -> Log.errorv(
+                        e,
+                        "Redis error occured while waiting for XREADGROUP on channel [{0}], error: [{1}]",
+                        incomingConfig.getChannel(),
+                        e.getMessage())
                 );
     }
 
