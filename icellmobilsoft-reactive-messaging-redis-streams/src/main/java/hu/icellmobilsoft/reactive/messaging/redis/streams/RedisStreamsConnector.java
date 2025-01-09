@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
@@ -70,8 +71,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
 
     @PostConstruct
     void init() {
-        // TODO random
-        this.consumer = "consumer";
+        this.consumer = UUID.randomUUID().toString();
     }
 
     void close(@Observes ShutdownEvent ignored) {
