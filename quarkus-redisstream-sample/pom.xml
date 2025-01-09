@@ -64,6 +64,10 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-redis-client</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-container-image-docker</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
@@ -135,6 +139,10 @@
             <properties>
                 <skipITs>false</skipITs>
                 <quarkus.native.enabled>true</quarkus.native.enabled>
+                <quarkus.native.container-build>true</quarkus.native.container-build>
+                <quarkus.native.builder-image>quay.io/quarkus/ubi-quarkus-mandrel-builder-image:jdk-21</quarkus.native.builder-image>
+                <quarkus.container-image.build>true</quarkus.container-image.build>
+                <quarkus.container-image.tag>${project.version}</quarkus.container-image.tag>
             </properties>
         </profile>
     </profiles>

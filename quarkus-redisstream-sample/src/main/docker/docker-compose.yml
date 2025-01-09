@@ -1,0 +1,22 @@
+services:
+  sample-redis:
+    container_name: sample-redis
+    image: dockerhub-dockerio.icellmobilsoft.hu/redis:7.0.1-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      interval: 1s
+      timeout: 3s
+      retries: 5
+  sample-quarkus:
+    container_name: sample-quarkus
+    image: mark.petrenyi/quarkus-redisstream-sample:1.0.0-SNAPSHOT
+    ports:
+      - '8080:8080'
+    environment:
+      QUARKUS_REDIS_HOSTS: redis://sample-redis:6379
+#      QUARKUS_LOG_CATEGORY__HU_ICELLMOBILSOFT__LEVEL: TRACE
+    depends_on:
+      sample-redis:
+        condition: service_healthy
