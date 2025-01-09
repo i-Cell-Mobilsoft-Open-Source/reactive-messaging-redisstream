@@ -42,6 +42,8 @@ import io.vertx.redis.client.impl.types.ErrorType;
         defaultValue = RedisStreamsProducer.DEFAULT_CONNECTION_KEY, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
 @ConnectorAttribute(name = "stream-key", description = "The Redis key holding the stream items", mandatory = true, type = "string",
         direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
+@ConnectorAttribute(name = "payload-field", description = "The stream entry field name containing the message payload", type = "string",
+        defaultValue = "message", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
 @ConnectorAttribute(name = "group", description = "The consumer group of the Redis stream to read from", mandatory = true, type = "string",
         direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xread-count", description = "The maximum number of entries to receive upon an XREADGROUP call", type = "int",
@@ -89,10 +91,10 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             redisAPI.xGroupCreate(streamKey, group);
             Log.infov("Created consumer group [{0}] on redis stream [{1}]", group, streamKey);
         }
-        return xreadMulti(redisAPI, incomingConfig).onSubscription().invoke(subscriptions::add);
+        return xreadMulti(redisAPI, incomingConfig);
     }
 
-    private Multi<Message<StreamEntry>> xreadMulti(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
+    private Multi<Message<Object>> xreadMulti(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         return Multi.createBy()
                 .repeating()
                 .uni(() -> xReadMessage(redisAPI, incomingConfig))
@@ -101,7 +103,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .filter(Objects::nonNull)
                 .invoke(r -> Log.tracev("Message received from redis-stream: [{0}]", r))
                 .filter(this::notExpired)
-                .map(streamEntry -> ContextAwareMessage.of(streamEntry).withAck(() -> ack(streamEntry, redisAPI, incomingConfig)))
+                .map(streamEntry -> toMessage(redisAPI, incomingConfig, streamEntry))
                 .onFailure(t -> {
                     if (consumerCancelled) {
                         Log.infov(t, "Exception occured on already cancelled channel:[{0}], skipping retry", incomingConfig.getChannel());
@@ -120,8 +122,33 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .invoke(() -> {
                     consumerCancelled = true;
                     Log.tracev("Subscription for channel [{0}] has been cancelled", incomingConfig.getChannel());
-                });
+                })
+                .onSubscription()
+                .invoke(subscriptions::add);
 
+    }
+
+    private Message<Object> toMessage(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig, StreamEntry streamEntry) {
+        String payloadField = incomingConfig.getPayloadField();
+        Object payload = null;
+        IncomingRedisStreamMetadata incomingRedisStreamMetadata = new IncomingRedisStreamMetadata(streamEntry.stream(), streamEntry.id());
+        if (streamEntry.fields() != null) {
+            for (Map.Entry<String, String> field : streamEntry.fields().entrySet()) {
+                String key = field.getKey();
+                String value = field.getValue();
+                if (incomingConfig.getPayloadField().equals(key)) {
+                    payload = value;
+                } else {
+                    incomingRedisStreamMetadata.getAdditionalFields().put(key, value);
+                }
+            }
+        }
+        if (payload == null) {
+            Log.warnv("Could not extract message payload from field {0} on entry [{1}]", payloadField, streamEntry);
+        }
+        return ContextAwareMessage.of(payload)
+                .withAck(() -> ack(streamEntry, redisAPI, incomingConfig))
+                .addMetadata(incomingRedisStreamMetadata);
     }
 
     private boolean notExpired(StreamEntry streamEntry) {
@@ -193,9 +220,23 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 minId = String.valueOf(epochMilli - ttlMs);
             }
             Map<String, String> streamEntryFields = new HashMap<>();
-            streamEntryFields.put("message", message.getPayload().toString());
+            streamEntryFields.put(outgoingConfig.getPayloadField(), message.getPayload().toString());
             if (fieldTtl != null) {
                 streamEntryFields.put("ttl", fieldTtl);
+            }
+            Optional<RedisStreamMetadata> redisStreamMetadata = message.getMetadata().get(RedisStreamMetadata.class);
+            if (redisStreamMetadata.isPresent()) {
+                Map<String, String> additionalFields = redisStreamMetadata.get().getAdditionalFields();
+                for (Map.Entry<String, String> entry : additionalFields.entrySet()) {
+                    String valuePresent = streamEntryFields.putIfAbsent(entry.getKey(), entry.getValue());
+                    if (valuePresent != null) {
+                        Log.warnv(
+                                "Ignoring RedisStreamMetadata.additionalFields entry key:[{0}] with value: [{1}] since key is already present with value:[{2}]",
+                                entry.getKey(),
+                                entry.getValue(),
+                                valuePresent);
+                    }
+                }
             }
             return redisAPI.xAdd(
                     outgoingConfig.getStreamKey(),

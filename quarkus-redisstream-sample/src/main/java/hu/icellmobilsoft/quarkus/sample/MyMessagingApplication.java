@@ -1,5 +1,6 @@
 package hu.icellmobilsoft.quarkus.sample;
 
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -11,7 +12,8 @@ import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.eclipse.microprofile.reactive.messaging.Message;
-import org.eclipse.microprofile.reactive.messaging.Metadata;
+import org.eclipse.microprofile.reactive.messaging.Outgoing;
+import org.jboss.logging.MDC;
 
 import io.quarkus.logging.Log;
 import io.quarkus.runtime.StartupEvent;
@@ -34,11 +36,17 @@ public class MyMessagingApplication {
     }
 
     public void sendMessages() {
-        Stream.of("Hello", "with", "Quarkus", "Messaging", "message").forEach(string -> emitter.send(string));
+        Stream.of("Hello", "Quarkus", "Messaging"
+        ).forEach(this::sendMessage);
     }
 
     public void sendMessage(String message) {
-        emitter.send(Message.of(message, Metadata.of("META")));
+        if (MDC.get("extSessionId") == null) {
+            MDC.put("extSessionId", UUID.randomUUID().toString());
+        }
+        Log.infov("Sending message: {0}", message);
+        emitter.send(Message.of(message));
+        MDC.clear();
     }
 
     /**
@@ -47,9 +55,9 @@ public class MyMessagingApplication {
      * @return
      */
     @Incoming("words-in")
-    // @Outgoing("uppercase")
+    @Outgoing("uppercase")
     @Blocking(ordered = false, value = "incoming-pool")
-    public void toUpperCase(Object message) {
+    public String toUpperCase(String message) {
         Log.infov("Message received: [{0}]", message);
         try {
             TimeUnit.MILLISECONDS.sleep(2000);
@@ -57,7 +65,7 @@ public class MyMessagingApplication {
             Thread.currentThread().interrupt();
         }
         if (message != null) {
-            if (message.toString().contains("error")) {
+            if (message.contains("error")) {
                 errorsFound++;
                 Log.errorv("Error: [{0}]", errorsFound);
                 if (errorsFound % 5 != 0) {
@@ -65,12 +73,13 @@ public class MyMessagingApplication {
                 }
             }
         }
+        return message.toUpperCase();
     }
 
     /**
      * Consume the uppercase channel (in-memory) and print the messages.
      **/
-    // @Incoming("uppercase")
+    @Incoming("uppercase")
     public void sink(String word) {
         Log.info(word);
     }
