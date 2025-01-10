@@ -8,6 +8,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
+import org.eclipse.microprofile.faulttolerance.Retry;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
@@ -57,6 +58,7 @@ public class MyMessagingApplication {
     @Incoming("words-in")
     @Outgoing("uppercase")
     @Blocking(ordered = false, value = "incoming-pool")
+    @Retry(maxRetries = 2)
     public String toUpperCase(String message) {
         Log.infov("Message received: [{0}]", message);
         try {

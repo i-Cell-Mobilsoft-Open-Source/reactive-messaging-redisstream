@@ -48,8 +48,6 @@ import io.vertx.redis.client.impl.types.ErrorType;
         direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xread-count", description = "The maximum number of entries to receive upon an XREADGROUP call", type = "int",
         defaultValue = "1", direction = ConnectorAttribute.Direction.INCOMING)
-@ConnectorAttribute(name = "retry", description = "The number of times the  consumer should retry", type = "int", defaultValue = "1",
-        direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xread-block-ms", description = "The milliseconds to wait in an XREADGROUP call", type = "int", defaultValue = "5000",
         direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xadd-maxlen", description = "The maximum number of entries to keep in the stream", type = "int",
