@@ -36,6 +36,12 @@ import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
 import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
 import io.vertx.redis.client.impl.types.ErrorType;
 
+/**
+ * Microprofile Reactive Streams connector for Redis Streams integration.
+ * 
+ * @since 1.0.0
+ * @author mark.petrenyi
+ */
 @ApplicationScoped
 @Connector(RedisStreamsConnector.ICELLMOBILSOFT_REDIS_STREAMS_CONNECTOR)
 @ConnectorAttribute(name = RedisStreamsConnector.REDIS_STREAM_CONNECTION_KEY_CONFIG, description = "The redis connection key to use",
@@ -58,30 +64,69 @@ import io.vertx.redis.client.impl.types.ErrorType;
         direction = ConnectorAttribute.Direction.OUTGOING)
 public class RedisStreamsConnector implements InboundConnector, OutboundConnector {
 
+    /**
+     * The name of the Redis Streams connector.
+     */
     public static final String ICELLMOBILSOFT_REDIS_STREAMS_CONNECTOR = "icellmobilsoft-redis-streams";
+
+    /**
+     * The microprofile config key used to specify the Redis connection key.
+     */
     public static final String REDIS_STREAM_CONNECTION_KEY_CONFIG = "connection-key";
+
     private final RedisStreamsProducer redisStreamsProducer;
     private String consumer;
     private volatile boolean consumerCancelled = false;
     private volatile boolean logSubscription = true;
     private final List<Flow.Subscription> subscriptions = new CopyOnWriteArrayList<>();
 
+    /**
+     * Constructs a RedisStreamsConnector with the specified CDI RedisStreamsProducer.
+     *
+     * @param redisStreamsProducer
+     *            the RedisStreamsProducer to be injected
+     */
     @Inject
     public RedisStreamsConnector(RedisStreamsProducer redisStreamsProducer) {
         this.redisStreamsProducer = redisStreamsProducer;
     }
 
+    /**
+     * Initializes the connector, setting a unique consumer ID.
+     */
     @PostConstruct
     void init() {
         this.consumer = UUID.randomUUID().toString();
     }
 
+    /**
+     * Closes the connector, cancelling all subscriptions.
+     *
+     * @param ignored
+     *            the shutdown event
+     */
     void close(@Observes ShutdownEvent ignored) {
-        // lezárjuk a subscription-öket, különben a quarkus kiüti alóluk a redis connection-t
+        // close all subscriptions before the corresponding redis connection gets closed
         subscriptions.forEach(Flow.Subscription::cancel);
         consumerCancelled = true;
     }
 
+    /**
+     * Gets the {@link Flow.Publisher} for the specified configuration.
+     * <p>
+     * This method is responsible for creating a publisher that reads messages from a Redis stream based on the provided configuration. It initializes
+     * the necessary Redis connection and consumer group, and sets up the message reading process.
+     * </p>
+     *
+     * @param config
+     *            the configuration for the Redis stream, must not be {@code null}. The configuration should include:
+     *            <ul>
+     *            <li>{@code stream-key}: The Redis key holding the stream items.</li>
+     *            <li>{@code group}: The consumer group of the Redis stream to read from.</li>
+     *            <li>{@code connection-key}: The Redis connection key to use.</li>
+     *            </ul>
+     * @return the publisher that reads messages from the Redis stream, will not be {@code null}.
+     */
     @Override
     public Flow.Publisher<? extends Message<?>> getPublisher(Config config) {
         RedisStreamsConnectorIncomingConfiguration incomingConfig = new RedisStreamsConnectorIncomingConfiguration(config);
@@ -96,6 +141,16 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         return xreadMulti(redisAPI, incomingConfig);
     }
 
+    /**
+     * Creates a Multi for reading messages from the Redis stream. This method sets up a repeating Uni that reads messages from the Redis stream
+     * indefinitely. It processes the messages, filters out expired ones, converts them to Message objects, and handles failures with retries.
+     *
+     * @param redisAPI
+     *            the RedisStreams instance used to interact with the Redis stream
+     * @param incomingConfig
+     *            the configuration for the incoming Redis stream, including stream key, group, and other settings
+     * @return the Multi for reading messages from the Redis stream
+     */
     private Multi<Message<Object>> xreadMulti(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         return Multi.createBy()
                 .repeating()
@@ -103,8 +158,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .indefinitely()
                 .flatMap(l -> Multi.createFrom().iterable(l))
                 .filter(Objects::nonNull)
-                .invoke(r -> Log.tracev("Message received from redis-stream: [{0}]", r)
-                )
+                .invoke(r -> Log.tracev("Message received from redis-stream: [{0}]", r))
                 .onSubscription()
                 .invoke(() -> {
                     if (logSubscription) {
@@ -122,7 +176,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .map(streamEntry -> toMessage(redisAPI, incomingConfig, streamEntry))
                 .onFailure(t -> {
                     if (consumerCancelled) {
-                        Log.infov(t, "Exception occured on already cancelled channel:[{0}], skipping retry", incomingConfig.getChannel());
+                        Log.infov(t, "Exception occurred on already cancelled channel:[{0}], skipping retry", incomingConfig.getChannel());
                     } else {
                         Log.errorv(
                                 t,
@@ -142,9 +196,19 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 })
                 .onSubscription()
                 .invoke(subscriptions::add);
-
     }
 
+    /**
+     * Converts a StreamEntry to a microprofile recitve streams message and metadata.
+     *
+     * @param redisAPI
+     *            the RedisStreams instance
+     * @param incomingConfig
+     *            the incoming configuration
+     * @param streamEntry
+     *            the stream entry
+     * @return the message
+     */
     private Message<Object> toMessage(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig, StreamEntry streamEntry) {
         String payloadField = incomingConfig.getPayloadField();
         Object payload = null;
@@ -168,6 +232,13 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .addMetadata(incomingRedisStreamMetadata);
     }
 
+    /**
+     * Checks if a stream entry has not expired.
+     *
+     * @param streamEntry
+     *            the stream entry
+     * @return true if the entry has not expired, false otherwise
+     */
     private boolean notExpired(StreamEntry streamEntry) {
         if (streamEntry.fields() != null && !streamEntry.fields().isEmpty() && streamEntry.fields().containsKey("ttl")) {
             String ttl = streamEntry.fields().get("ttl");
@@ -182,6 +253,17 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         return true;
     }
 
+    /**
+     * Send ACK after successfull processing of a stream entry.
+     *
+     * @param streamEntry
+     *            the stream entry
+     * @param redisAPI
+     *            the RedisStreams instance
+     * @param incomingConfig
+     *            the incoming configuration
+     * @return a CompletionStage representing the acknowledgment
+     */
     private CompletionStage<Void> ack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         Uni<Integer> integerUni = redisAPI.xAck(incomingConfig.getStreamKey(), incomingConfig.getGroup(), streamEntry.id());
         return integerUni.onFailure().recoverWithItem(throwable -> {
@@ -195,6 +277,16 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         }).replaceWithVoid().subscribeAsCompletionStage();
     }
 
+    /**
+     * Reads messages from the Redis stream using the XREADGROUP command. This method sets up a Uni that reads messages from the Redis stream for the
+     * specified consumer group. It handles Redis connection errors and logs any issues that occur during the read operation.
+     *
+     * @param redisAPI
+     *            the RedisStreams instance used to interact with the Redis stream
+     * @param incomingConfig
+     *            the configuration for the incoming Redis stream, including stream key, group, and other settings
+     * @return a Uni containing a list of stream entries read from the Redis stream
+     */
     private Uni<List<StreamEntry>> xReadMessage(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         return redisAPI
                 .xReadGroup(
@@ -205,14 +297,28 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                         incomingConfig.getXreadBlockMs())
                 // Redis connection error while waiting for XREADGROUP response
                 .onFailure(ErrorType.class)
-                .invoke(e -> Log.errorv(
-                        e,
-                        "Redis error occured while waiting for XREADGROUP on channel [{0}], error: [{1}]",
-                        incomingConfig.getChannel(),
-                        e.getMessage())
+                .invoke(
+                        e -> Log.errorv(
+                                e,
+                                "Redis error occured while waiting for XREADGROUP on channel [{0}], error: [{1}]",
+                                incomingConfig.getChannel(),
+                                e.getMessage())
                 );
     }
 
+    /**
+     * Gets the subscriber for the specified configuration.
+     * <p>
+     * This method is responsible for creating a {@link Flow.Subscriber} that will handle outgoing messages to a Redis stream. The configuration
+     * provided is used to set up the connection and behavior of the subscriber.
+     * </p>
+     *
+     * @param config
+     *            the configuration for the subscriber, must not be {@code null}.
+     * @return the subscriber that will handle outgoing messages to the Redis stream.
+     * @throws IllegalArgumentException
+     *             if the configuration is invalid.
+     */
     @Override
     public Flow.Subscriber<? extends Message<?>> getSubscriber(Config config) {
         RedisStreamsConnectorOutgoingConfiguration outgoingConfig = new RedisStreamsConnectorOutgoingConfiguration(config);
