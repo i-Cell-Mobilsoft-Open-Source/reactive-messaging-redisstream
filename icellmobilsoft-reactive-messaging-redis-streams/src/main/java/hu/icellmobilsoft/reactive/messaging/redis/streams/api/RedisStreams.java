@@ -75,9 +75,9 @@ public interface RedisStreams {
      * @param id
      *            the ID of the message
      * @param maxLen
-     *            the maximum length of the stream
+     *            the maximum length of the stream, it takes precedence over {@code minId}
      * @param exact
-     *            whether the maximum length is exact
+     *            whether the maximum length should be exact or near exact
      * @param minId
      *            the minimum ID of entries allowed in stream
      * @param fields

@@ -11,13 +11,32 @@ import io.quarkus.redis.client.RedisClientName;
 import io.quarkus.runtime.annotations.Recorder;
 import io.vertx.mutiny.redis.client.RedisAPI;
 
+/**
+ * Recorder class for Redis Streams. This class is responsible for creating and configuring the RedisStreamsProducer.
+ * 
+ * @since 1.0.0
+ * @author mark.petrenyi
+ */
 @Recorder
 public class RedisStreamsRecorder {
 
+    /**
+     * Creates a function that produces a RedisStreamsProducer.
+     *
+     * @return a function that takes a SyntheticCreationalContext and returns a RedisStreamsProducer
+     */
     public Function<SyntheticCreationalContext<RedisStreamsProducer>, RedisStreamsProducer> createWith() {
         return this::redisStreamsProducer;
     }
 
+    /**
+     * Produces a RedisStreamsProducer based on the given SyntheticCreationalContext. This method retrieves the RedisAPI instance using the
+     * appropriate qualifier and creates a new QuarkusRedisStreamsAdapter.
+     *
+     * @param ctx
+     *            the SyntheticCreationalContext used to get the injected reference of RedisAPI
+     * @return a RedisStreamsProducer configured with the RedisAPI instance
+     */
     private RedisStreamsProducer redisStreamsProducer(SyntheticCreationalContext<RedisStreamsProducer> ctx) {
         return connectionKey -> {
             Annotation qualifier = Default.Literal.INSTANCE;

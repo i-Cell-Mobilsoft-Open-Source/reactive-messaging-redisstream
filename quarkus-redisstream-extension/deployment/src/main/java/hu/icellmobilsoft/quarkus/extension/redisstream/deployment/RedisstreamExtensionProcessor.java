@@ -28,15 +28,37 @@ import io.quarkus.smallrye.reactivemessaging.deployment.items.ChannelDirection;
 import io.quarkus.smallrye.reactivemessaging.deployment.items.ConnectorManagedChannelBuildItem;
 import io.vertx.mutiny.redis.client.RedisAPI;
 
+/**
+ * Quarkus Extension processor for reactive-streams Redis Stream connector.
+ * 
+ * @since 1.0.0
+ * @author mark.petrenyi
+ */
 class RedisstreamExtensionProcessor {
 
     private static final String FEATURE = "redisstream-extension";
 
+    private static final String CHANNEL_PROPERTY_FORMAT = "mp.messaging.%s.%s.%s";
+
+    /**
+     * Registers the Redis Stream extension feature.
+     *
+     * @return a FeatureBuildItem representing the Redis Stream extension feature
+     */
     @BuildStep
     FeatureBuildItem feature() {
         return new FeatureBuildItem(FEATURE);
     }
 
+    /**
+     * Produces a list of requested Redis clients based on the channels managed by connectors. This method iterates over the channels managed by
+     * connectors and extracts the Redis client keys from the configuration. It then creates a list of RequestedRedisClientBuildItem for each unique
+     * Redis client key.
+     *
+     * @param channelsManagedByConnectors
+     *            the list of channels managed by reactive streams connectors
+     * @return a list of RequestedRedisClientBuildItem representing the Redis clients requested by used redis stream connectors
+     */
     @BuildStep
     List<RequestedRedisClientBuildItem> produceRedisClients(List<ConnectorManagedChannelBuildItem> channelsManagedByConnectors) {
         Set<String> redisCLientKeys = new HashSet<>();
@@ -54,6 +76,17 @@ class RedisstreamExtensionProcessor {
         return redisCLientKeys.stream().map(RequestedRedisClientBuildItem::new).toList();
     }
 
+    /**
+     * Creates a synthetic bean for RedisStreamsProducer. This method configures a synthetic bean for RedisStreamsProducer and adds injection points
+     * for each requested Redis client. The synthetic bean is marked as unremovable to ensure neither the bean nor its injected redis-clients are
+     * removed during the build process.
+     *
+     * @param redisClients
+     *            the list of requested Redis clients
+     * @param recorder
+     *            the RedisStreamsRecorder instance
+     * @return a SyntheticBeanBuildItem representing the synthetic bean for RedisStreamsProducer
+     */
     @BuildStep
     @Record(ExecutionTime.STATIC_INIT)
     SyntheticBeanBuildItem syntheticBean(List<RequestedRedisClientBuildItem> redisClients, RedisStreamsRecorder recorder) {
@@ -74,11 +107,21 @@ class RedisstreamExtensionProcessor {
         return redisStreamsProducer.unremovable().createWith(recorder.createWith()).done();
     }
 
-    static String channelPropertyFormat = "mp.messaging.%s.%s.%s";
-
-    static String getChannelPropertyKey(String channelName, String propertyName, boolean incoming) {
+    /**
+     * Constructs the channel property key for the given parameters. This method formats the channel property key based on the channel name, property
+     * name, and direction (incoming or outgoing).
+     *
+     * @param channelName
+     *            the name of the channel
+     * @param propertyName
+     *            the name of the property
+     * @param incoming
+     *            true if the channel is incoming, false if outgoing
+     * @return the constructed channel property key
+     */
+    private String getChannelPropertyKey(String channelName, String propertyName, boolean incoming) {
         return String.format(
-                channelPropertyFormat,
+                CHANNEL_PROPERTY_FORMAT,
                 incoming ? "incoming" : "outgoing",
                 channelName.contains(".") ? "\"" + channelName + "\"" : channelName,
                 propertyName);

@@ -14,14 +14,32 @@ import io.smallrye.mutiny.Uni;
 import io.vertx.mutiny.redis.client.RedisAPI;
 import io.vertx.mutiny.redis.client.Response;
 
+/**
+ * Adapter class for Redis Streams using Quarkus. This class provides methods to interact with Redis Streams using the RedisAPI.
+ * 
+ * @since 1.0.0
+ * @author mark.petrenyi
+ * 
+ * @see RedisAPI
+ * @see RedisStreams
+ */
 public class QuarkusRedisStreamsAdapter implements RedisStreams {
 
     private final RedisAPI redisAPI;
 
+    /**
+     * Constructs a new QuarkusRedisStreamsAdapter with the given RedisAPI.
+     *
+     * @param redisAPI
+     *            the RedisAPI instance to use for Redis operations
+     */
     public QuarkusRedisStreamsAdapter(RedisAPI redisAPI) {
         this.redisAPI = redisAPI;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean existGroup(String stream, String group) {
         try {
@@ -29,29 +47,39 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
             Response groups = redisAPI.xinfoAndAwait(List.of("GROUPS", stream));
             return StreamSupport.stream(groups.spliterator(), false).map(r -> r.get("name")).map(Response::toString).anyMatch(group::equals);
         } catch (Exception e) {
-            // ha nincs kulcs akkor a kovetkezo hiba jon:
-            // redis.clients.jedis.exceptions.JedisDataException: ERR no such key
             Log.debugv("Redis exception during checking group [{0}] on stream [{1}]: [{2}]", group, stream, e.getLocalizedMessage());
             return false;
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String xGroupCreate(String stream, String group) {
         Response create = redisAPI.xgroupAndAwait(List.of("CREATE", stream, group, "0", "MKSTREAM"));
         return create.toString();
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Uni<Integer> xAck(String stream, String group, String id) {
         return redisAPI.xack(List.of(stream, group, id)).map(Response::toInteger);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Uni<String> xAdd(String stream, String id, Map<String, String> fields) {
         return xAdd(stream, id, null, null, null, fields);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Uni<String> xAdd(String stream, String id, Integer maxLen, Boolean exact, String minId, Map<String, String> fields) {
         List<String> xAddArgs = new ArrayList<>();
@@ -77,6 +105,9 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
         return redisAPI.xadd(xAddArgs).map(Response::toString);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Uni<List<StreamEntry>> xReadGroup(String stream, String group, String consumer, Integer count, Integer blockMs) {
         List<String> xReadArgs = new ArrayList<>();
@@ -97,9 +128,15 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
 
         Log.tracev("Calling redis command XREADGROUP with args:[{0}]", xReadArgs);
         return redisAPI.xreadgroup(xReadArgs).map(this::parseXReadResponse);
-
     }
 
+    /**
+     * Parses the raw response from the {@code XREADGROUP} command.
+     *
+     * @param response
+     *            the response from the Redis server
+     * @return a list of StreamEntry objects
+     */
     private List<StreamEntry> parseXReadResponse(Response response) {
         if (response == null) {
             return Collections.emptyList();
@@ -133,5 +170,4 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
         }
         return new StreamEntry(streamKey, entryId, fields);
     }
-
 }
