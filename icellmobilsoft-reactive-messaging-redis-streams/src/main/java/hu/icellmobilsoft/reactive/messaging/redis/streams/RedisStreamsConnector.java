@@ -3,15 +3,18 @@ package hu.icellmobilsoft.reactive.messaging.redis.streams;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
+import java.util.concurrent.TimeUnit;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -19,8 +22,10 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
 import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.eclipse.microprofile.reactive.messaging.spi.Connector;
+import org.eclipse.microprofile.reactive.messaging.spi.ConnectorFactory;
 
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreamsProducer;
@@ -79,6 +84,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     private volatile boolean consumerCancelled = false;
     private volatile boolean logSubscription = true;
     private final List<Flow.Subscription> subscriptions = new CopyOnWriteArrayList<>();
+    private final Set<String> underProcessing = Collections.synchronizedSet(new HashSet<>());
+    private final ReducableSemaphore shutdownPermit = new ReducableSemaphore(1);
+    private final Integer gracefulShutdownTimeout;
 
     /**
      * Constructs a RedisStreamsConnector with the specified CDI RedisStreamsProducer.
@@ -87,8 +95,11 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      *            the RedisStreamsProducer to be injected
      */
     @Inject
-    public RedisStreamsConnector(RedisStreamsProducer redisStreamsProducer) {
+    public RedisStreamsConnector(RedisStreamsProducer redisStreamsProducer,
+            @ConfigProperty(name = ConnectorFactory.CONNECTOR_PREFIX + ICELLMOBILSOFT_REDIS_STREAMS_CONNECTOR + ".graceful-timeout-ms",
+                    defaultValue = "60000") Integer gracefulShutdownTimeout) {
         this.redisStreamsProducer = redisStreamsProducer;
+        this.gracefulShutdownTimeout = gracefulShutdownTimeout;
     }
 
     /**
@@ -106,9 +117,17 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      *            the shutdown event
      */
     void close(@Observes ShutdownEvent ignored) {
-        // close all subscriptions before the corresponding redis connection gets closed
-        subscriptions.forEach(Flow.Subscription::cancel);
         consumerCancelled = true;
+        // cancel all subscriptions, don't read new messages from redis
+        subscriptions.forEach(Flow.Subscription::cancel);
+        // wait for all messages to be processed
+        try {
+            if (!shutdownPermit.tryAcquire(gracefulShutdownTimeout, TimeUnit.MILLISECONDS)) {
+                Log.warnv("There are still messages under processing: [{0}] after graceful timeout", underProcessing);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**
@@ -159,6 +178,10 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .flatMap(l -> Multi.createFrom().iterable(l))
                 .filter(Objects::nonNull)
                 .invoke(r -> Log.tracev("Message received from redis-stream: [{0}]", r))
+                // reduce shutdown permits to ensure graceful shutdown
+                .invoke(streamEntry -> shutdownPermit.reducePermits(1))
+                // keep the message ids under process for logging
+                .invoke(streamEntry -> underProcessing.add(streamEntry.id()))
                 .onSubscription()
                 .invoke(() -> {
                     if (logSubscription) {
@@ -169,9 +192,19 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                                 incomingConfig.getGroup(),
                                 consumer,
                                 incomingConfig.getConnectionKey());
+                        // don't log subscription again
                         logSubscription = false;
                     }
                 })
+                .flatMap(entity -> {
+                    if (notExpired(entity)) {
+                        return Multi.createFrom().item(entity);
+                    } else {
+                        // if it is expired, ack it immediately
+                        return ack(entity, redisAPI, incomingConfig).map(i -> entity).toMulti();
+                    }
+                })
+                // skip expired messages after they have been acked
                 .filter(this::notExpired)
                 .map(streamEntry -> toMessage(redisAPI, incomingConfig, streamEntry))
                 .onFailure(t -> {
@@ -182,8 +215,10 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                                 t,
                                 "Uncaught exception while processing messages from channel [{0}], trying to recover..",
                                 incomingConfig.getChannel());
+                        // ensure that the subscription is logged again to have information on recovery
                         logSubscription = true;
                     }
+                    // try to recover only if the consumer is not cancelled
                     return !consumerCancelled;
                 })
                 .retry()
@@ -228,7 +263,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             Log.warnv("Could not extract message payload from field {0} on entry [{1}]", payloadField, streamEntry);
         }
         return ContextAwareMessage.of(payload)
-                .withAck(() -> ack(streamEntry, redisAPI, incomingConfig))
+                .withAck(() -> ack(streamEntry, redisAPI, incomingConfig).subscribeAsCompletionStage())
                 .addMetadata(incomingRedisStreamMetadata);
     }
 
@@ -254,7 +289,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     }
 
     /**
-     * Send ACK after successfull processing of a stream entry.
+     * Send ACK after successful processing of a stream entry.
      *
      * @param streamEntry
      *            the stream entry
@@ -264,17 +299,27 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      *            the incoming configuration
      * @return a CompletionStage representing the acknowledgment
      */
-    private CompletionStage<Void> ack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
+    private Uni<Void> ack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         Uni<Integer> integerUni = redisAPI.xAck(incomingConfig.getStreamKey(), incomingConfig.getGroup(), streamEntry.id());
-        return integerUni.onFailure().recoverWithItem(throwable -> {
-            Log.errorv(
-                    throwable,
-                    "ACK failed for entry:[{0}] on channel: [{1}] by consumer group:[{2}]",
-                    streamEntry.id(),
-                    incomingConfig.getChannel(),
-                    incomingConfig.getGroup());
-            return null;
-        }).replaceWithVoid().subscribeAsCompletionStage();
+        return integerUni
+                .invoke(result -> Log.tracev("ACK completed for id [{0}] with result [{1}]", streamEntry.id(), result)
+                )
+                .onFailure()
+                .recoverWithItem(throwable -> {
+                    Log.errorv(
+                            throwable,
+                            "ACK failed for entry:[{0}] on channel: [{1}] by consumer group:[{2}]",
+                            streamEntry.id(),
+                            incomingConfig.getChannel(),
+                            incomingConfig.getGroup());
+                    return null;
+                })
+                .replaceWithVoid()
+                // return permit after item or failure
+                .invoke(() -> {
+                    underProcessing.remove(streamEntry.id());
+                    shutdownPermit.release();
+                });
     }
 
     /**
@@ -303,6 +348,15 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                                 "Redis error occured while waiting for XREADGROUP on channel [{0}], error: [{1}]",
                                 incomingConfig.getChannel(),
                                 e.getMessage())
+                )
+                .onTermination()
+                .invoke(
+                        (items, throwable, isCancelled) -> Log.tracev(
+                                "Terminating XREADGROUP call on channel [{0}], items: [{1}], throwable:[{2}], isCancelled:[{3}]",
+                                incomingConfig.getChannel(),
+                                items,
+                                throwable,
+                                isCancelled)
                 );
     }
 
