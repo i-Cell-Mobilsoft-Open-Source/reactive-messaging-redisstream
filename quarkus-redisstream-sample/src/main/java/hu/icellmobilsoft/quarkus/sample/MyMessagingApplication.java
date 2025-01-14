@@ -1,5 +1,6 @@
 package hu.icellmobilsoft.quarkus.sample;
 
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
@@ -16,6 +17,7 @@ import org.eclipse.microprofile.reactive.messaging.Message;
 import org.eclipse.microprofile.reactive.messaging.Outgoing;
 import org.jboss.logging.MDC;
 
+import hu.icellmobilsoft.reactive.messaging.redis.streams.IncomingRedisStreamMetadata;
 import io.quarkus.logging.Log;
 import io.quarkus.runtime.StartupEvent;
 import io.smallrye.reactive.messaging.annotations.Blocking;
@@ -59,15 +61,18 @@ public class MyMessagingApplication {
     @Outgoing("uppercase")
     @Blocking(ordered = false, value = "incoming-pool")
     @Retry(maxRetries = 2)
-    public String toUpperCase(String message) {
-        Log.infov("Message received: [{0}]", message);
+//    public String toUpperCase(Message<String> message) {
+//        logMetadata(message);
+//        String payload = message.getPayload();
+    public String toUpperCase(String payload) {
+        Log.infov("Message received: [{0}]", payload);
         try {
             TimeUnit.MILLISECONDS.sleep(2000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        if (message != null) {
-            if (message.contains("error")) {
+        if (payload != null) {
+            if (payload.contains("error")) {
                 errorsFound++;
                 Log.errorv("Error: [{0}]", errorsFound);
                 if (errorsFound % 5 != 0) {
@@ -75,7 +80,14 @@ public class MyMessagingApplication {
                 }
             }
         }
-        return message.toUpperCase();
+        return payload.toUpperCase();
+    }
+
+    private static void logMetadata(Message<String> message) {
+        Optional<IncomingRedisStreamMetadata> metadata = message.getMetadata().get(IncomingRedisStreamMetadata.class);
+        Log.infov("Message metadata stream: [{0}]", metadata.map(IncomingRedisStreamMetadata::getStream));
+        Log.infov("Message metadata id: [{0}]", metadata.map(IncomingRedisStreamMetadata::getId));
+        Log.infov("Message metadata additional: [{0}]", metadata.map(IncomingRedisStreamMetadata::getAdditionalFields));
     }
 
     /**
