@@ -172,16 +172,12 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      */
     private Multi<Message<Object>> xreadMulti(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         return Multi.createBy()
+                // Multi creation
                 .repeating()
                 .uni(() -> xReadMessage(redisAPI, incomingConfig))
                 .indefinitely()
                 .flatMap(l -> Multi.createFrom().iterable(l))
-                .filter(Objects::nonNull)
-                .invoke(r -> Log.tracev("Message received from redis-stream: [{0}]", r))
-                // reduce shutdown permits to ensure graceful shutdown
-                .invoke(streamEntry -> shutdownPermit.reducePermits(1))
-                // keep the message ids under process for logging
-                .invoke(streamEntry -> underProcessing.add(streamEntry.id()))
+                // Log first or recovered subscription to multi
                 .onSubscription()
                 .invoke(() -> {
                     if (logSubscription) {
@@ -196,6 +192,16 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                         logSubscription = false;
                     }
                 })
+                // Collect subscriptions in order to cancel them on shutdown
+                .onSubscription()
+                .invoke(subscriptions::add)
+                // On item
+                .filter(Objects::nonNull)
+                .invoke(r -> Log.tracev("Message received from redis-stream: [{0}]", r))
+                // reduce shutdown permits to ensure graceful shutdown
+                .invoke(streamEntry -> shutdownPermit.reducePermits(1))
+                // keep the consumed message ids for logging
+                .invoke(streamEntry -> underProcessing.add(streamEntry.id()))
                 .flatMap(entity -> {
                     if (notExpired(entity)) {
                         return Multi.createFrom().item(entity);
@@ -206,7 +212,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 })
                 // skip expired messages after they have been acked
                 .filter(this::notExpired)
+                // Convert to MP message
                 .map(streamEntry -> toMessage(redisAPI, incomingConfig, streamEntry))
+                // on failure log and retry
                 .onFailure(t -> {
                     if (consumerCancelled) {
                         Log.infov(t, "Exception occurred on already cancelled channel:[{0}], skipping retry", incomingConfig.getChannel());
@@ -224,13 +232,12 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .retry()
                 .withBackOff(Duration.of(1, ChronoUnit.SECONDS), Duration.of(30, ChronoUnit.SECONDS))
                 .indefinitely()
+                // Mark the connector as cancelled
                 .onCancellation()
                 .invoke(() -> {
                     consumerCancelled = true;
                     Log.tracev("Subscription for channel [{0}] has been cancelled", incomingConfig.getChannel());
-                })
-                .onSubscription()
-                .invoke(subscriptions::add);
+                });
     }
 
     /**
