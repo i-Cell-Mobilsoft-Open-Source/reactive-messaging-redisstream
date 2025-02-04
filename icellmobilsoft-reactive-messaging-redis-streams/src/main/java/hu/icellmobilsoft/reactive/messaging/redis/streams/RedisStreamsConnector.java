@@ -388,7 +388,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         if (outgoingConfig.getXaddMaxlen().isPresent() && ttlMsOpt.isPresent()) {
             Log.warnv("When both xadd-maxlen and xadd-ttl-ms is set only maxlen will be used!");
         }
-        return MultiUtils.via(multi -> multi.onItem().transformToUniAndConcatenate(message -> {
+        return MultiUtils.via(multi -> multi.onItem().transformToUniAndMerge(message -> {
             Log.tracev("Sending message payload:[{0}] to redis stream:[{1}]", message.getPayload(), outgoingConfig.getStreamKey());
             String minId = null;
             String fieldTtl = null;
