@@ -17,8 +17,11 @@ import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.BeforeDestroyed;
 import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.event.Reception;
 import jakarta.inject.Inject;
 
 import org.eclipse.microprofile.config.Config;
@@ -26,12 +29,11 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.eclipse.microprofile.reactive.messaging.spi.Connector;
 import org.eclipse.microprofile.reactive.messaging.spi.ConnectorFactory;
+import org.jboss.logging.Logger;
 
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreamsProducer;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.StreamEntry;
-import io.quarkus.logging.Log;
-import io.quarkus.runtime.ShutdownEvent;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.reactive.messaging.annotations.ConnectorAttribute;
@@ -39,7 +41,6 @@ import io.smallrye.reactive.messaging.connector.InboundConnector;
 import io.smallrye.reactive.messaging.connector.OutboundConnector;
 import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
 import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
-import io.vertx.redis.client.impl.types.ErrorType;
 
 /**
  * Microprofile Reactive Streams connector for Redis Streams integration.
@@ -79,6 +80,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      */
     public static final String REDIS_STREAM_CONNECTION_KEY_CONFIG = "connection-key";
 
+    @Inject
+    private Logger log;
+
     private final RedisStreamsProducer redisStreamsProducer;
     private String consumer;
     private volatile boolean consumerCancelled = false;
@@ -106,7 +110,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      * Initializes the connector, setting a unique consumer ID.
      */
     @PostConstruct
-    void init() {
+    public void init() {
         this.consumer = UUID.randomUUID().toString();
     }
 
@@ -116,14 +120,21 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      * @param ignored
      *            the shutdown event
      */
-    void close(@Observes ShutdownEvent ignored) {
+    public void terminate(@Observes(notifyObserver = Reception.IF_EXISTS) @Priority(10000) @BeforeDestroyed(ApplicationScoped.class) Object event) {
+        close();
+    }
+
+    public void close() {
+        if (consumerCancelled) {
+            return;
+        }
         consumerCancelled = true;
         // cancel all subscriptions, don't read new messages from redis
         subscriptions.forEach(Flow.Subscription::cancel);
         // wait for all messages to be processed
         try {
             if (!shutdownPermit.tryAcquire(gracefulShutdownTimeout, TimeUnit.MILLISECONDS)) {
-                Log.warnv("There are still messages under processing: [{0}] after graceful timeout", underProcessing);
+                log.warnv("There are still messages under processing: [{0}] after graceful timeout", underProcessing);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -155,7 +166,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         RedisStreams redisAPI = redisStreamsProducer.produce(incomingConfig.getConnectionKey());
         if (!redisAPI.existGroup(streamKey, group)) {
             redisAPI.xGroupCreate(streamKey, group);
-            Log.infov("Created consumer group [{0}] on redis stream [{1}]", group, streamKey);
+            log.infov("Created consumer group [{0}] on redis stream [{1}]", group, streamKey);
         }
         return xreadMulti(redisAPI, incomingConfig);
     }
@@ -181,7 +192,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .onSubscription()
                 .invoke(() -> {
                     if (logSubscription) {
-                        Log.infov(
+                        log.infov(
                                 "Subscribing channel [{0}] to redis stream [{1}] consuming group [{2}] as consumer [{3}] using redis connection key [{4}]",
                                 incomingConfig.getChannel(),
                                 incomingConfig.getStreamKey(),
@@ -197,7 +208,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .invoke(subscriptions::add)
                 // On item
                 .filter(Objects::nonNull)
-                .invoke(r -> Log.tracev("Message received from redis-stream: [{0}]", r))
+                .invoke(r -> log.tracev("Message received from redis-stream: [{0}]", r))
                 // reduce shutdown permits to ensure graceful shutdown
                 .invoke(streamEntry -> shutdownPermit.reducePermits(1))
                 // keep the consumed message ids for logging
@@ -217,9 +228,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 // on failure log and retry
                 .onFailure(t -> {
                     if (consumerCancelled) {
-                        Log.infov(t, "Exception occurred on already cancelled channel:[{0}], skipping retry", incomingConfig.getChannel());
+                        log.infov(t, "Exception occurred on already cancelled channel:[{0}], skipping retry", incomingConfig.getChannel());
                     } else {
-                        Log.errorv(
+                        log.errorv(
                                 t,
                                 "Uncaught exception while processing messages from channel [{0}], trying to recover..",
                                 incomingConfig.getChannel());
@@ -236,7 +247,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .onCancellation()
                 .invoke(() -> {
                     consumerCancelled = true;
-                    Log.tracev("Subscription for channel [{0}] has been cancelled", incomingConfig.getChannel());
+                    log.tracev("Subscription for channel [{0}] has been cancelled", incomingConfig.getChannel());
                 });
     }
 
@@ -267,7 +278,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             }
         }
         if (payload == null) {
-            Log.warnv("Could not extract message payload from field {0} on entry [{1}]", payloadField, streamEntry);
+            log.warnv("Could not extract message payload from field {0} on entry [{1}]", payloadField, streamEntry);
         }
         return ContextAwareMessage.of(payload)
                 .withAck(() -> ack(streamEntry, redisAPI, incomingConfig).subscribeAsCompletionStage())
@@ -288,7 +299,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 Instant expirationTime = Instant.ofEpochMilli(Long.parseLong(ttl));
                 return expirationTime.isAfter(Instant.now());
             } catch (NumberFormatException e) {
-                Log.warnv(e, "Could not parse ttl:[{0}] as epoch millis", ttl);
+                log.warnv(e, "Could not parse ttl:[{0}] as epoch millis", ttl);
                 return true;
             }
         }
@@ -309,11 +320,11 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     private Uni<Void> ack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         Uni<Integer> integerUni = redisAPI.xAck(incomingConfig.getStreamKey(), incomingConfig.getGroup(), streamEntry.id());
         return integerUni
-                .invoke(result -> Log.tracev("ACK completed for id [{0}] with result [{1}]", streamEntry.id(), result)
+                .invoke(result -> log.tracev("ACK completed for id [{0}] with result [{1}]", streamEntry.id(), result)
                 )
                 .onFailure()
                 .recoverWithItem(throwable -> {
-                    Log.errorv(
+                    log.errorv(
                             throwable,
                             "ACK failed for entry:[{0}] on channel: [{1}] by consumer group:[{2}]",
                             streamEntry.id(),
@@ -348,9 +359,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                         incomingConfig.getXreadCount(),
                         incomingConfig.getXreadBlockMs())
                 // Redis connection error while waiting for XREADGROUP response
-                .onFailure(ErrorType.class)
+                .onFailure()
                 .invoke(
-                        e -> Log.errorv(
+                        e -> log.errorv(
                                 e,
                                 "Redis error occured while waiting for XREADGROUP on channel [{0}], error: [{1}]",
                                 incomingConfig.getChannel(),
@@ -358,7 +369,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 )
                 .onTermination()
                 .invoke(
-                        (items, throwable, isCancelled) -> Log.tracev(
+                        (items, throwable, isCancelled) -> log.tracev(
                                 "Terminating XREADGROUP call on channel [{0}], items: [{1}], throwable:[{2}], isCancelled:[{3}]",
                                 incomingConfig.getChannel(),
                                 items,
@@ -386,10 +397,10 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         RedisStreams redisAPI = redisStreamsProducer.produce(outgoingConfig.getConnectionKey());
         Optional<Long> ttlMsOpt = outgoingConfig.getXaddTtlMs();
         if (outgoingConfig.getXaddMaxlen().isPresent() && ttlMsOpt.isPresent()) {
-            Log.warnv("When both xadd-maxlen and xadd-ttl-ms is set only maxlen will be used!");
+            log.warnv("When both xadd-maxlen and xadd-ttl-ms is set only maxlen will be used!");
         }
         return MultiUtils.via(multi -> multi.onItem().transformToUniAndMerge(message -> {
-            Log.tracev("Sending message payload:[{0}] to redis stream:[{1}]", message.getPayload(), outgoingConfig.getStreamKey());
+            log.tracev("Sending message payload:[{0}] to redis stream:[{1}]", message.getPayload(), outgoingConfig.getStreamKey());
             String minId = null;
             String fieldTtl = null;
             if (ttlMsOpt.isPresent()) {
@@ -411,7 +422,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 for (Map.Entry<String, String> entry : additionalFields.entrySet()) {
                     String valuePresent = streamEntryFields.putIfAbsent(entry.getKey(), entry.getValue());
                     if (valuePresent != null) {
-                        Log.warnv(
+                        log.warnv(
                                 "Ignoring RedisStreamMetadata.additionalFields entry key:[{0}] with value: [{1}] since key is already present with value:[{2}]",
                                 entry.getKey(),
                                 entry.getValue(),
