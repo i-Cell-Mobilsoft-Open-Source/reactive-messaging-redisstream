@@ -21,4 +21,9 @@ public class RedisStreamMetadata {
     public Map<String, String> getAdditionalFields() {
         return additionalFields;
     }
+
+    public RedisStreamMetadata withAdditionalField(String key, String value) {
+        additionalFields.put(key, value);
+        return this;
+    }
 }
