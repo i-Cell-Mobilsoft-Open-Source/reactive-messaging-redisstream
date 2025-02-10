@@ -117,20 +117,12 @@ public class RedisStreamsConnectorTest {
                     .until(() -> testConsumer.getMessages().size() > 0);
             Assertions.assertEquals(payload, testConsumer.getMessages().get(0));
 
-            // And the message should be removed from the stream
-            List<StreamMessage<String, String>> xreadgroup = redisClient.connect()
-                    .sync()
-                    .xreadgroup(Consumer.from(TEST__CONSUMER_GROUP, TEST_CONSUMER_ID), XReadArgs.StreamOffset.from(streamKey, ZERO_OFFSET));
-            assertThat(xreadgroup).map(StreamMessage::getId).doesNotContain(messageId);
-
-            // And the message should be acknowledged
-            PendingMessages pending = redisClient.connect().sync().xpending(streamKey, TEST__CONSUMER_GROUP);
-            assertThat(pending.getCount()).isZero();
+            // And the message should be removed from the stream and the message should be acknowledged
+            assertThatMessageIsAckedOnRedis(
+                    messageId,
+                    redisClient,
+                    streamKey);
         }
-    }
-
-    private RedisClient connectToRedisContainer() {
-        return RedisClient.create(RedisURI.create("localhost", REDIS_CONTAINER.getMappedPort(REDIS_PORT)));
     }
 
     @Test
@@ -158,17 +150,11 @@ public class RedisStreamsConnectorTest {
                         .extracting(m -> m.get(additionalFieldKey))
                         .isEqualTo(additionalFieldValue);
             });
-            // And the message should be removed from the stream
-            List<StreamMessage<String, String>> xreadgroup = redisClient.connect()
-                    .sync()
-                    .xreadgroup(
-                            Consumer.from(TEST__CONSUMER_GROUP, TEST_CONSUMER_ID),
-                            XReadArgs.Builder.block(1000),
-                            XReadArgs.StreamOffset.from(streamKey, ZERO_OFFSET));
-            assertThat(xreadgroup).map(StreamMessage::getId).doesNotContain(messageId);
-            // And the message should be acknowledged
-            PendingMessages pending = redisClient.connect().sync().xpending(streamKey, TEST__CONSUMER_GROUP);
-            assertThat(pending.getCount()).isZero();
+            // And the message should be removed from the stream and the message should be acknowledged
+            assertThatMessageIsAckedOnRedis(
+                    messageId,
+                    redisClient,
+                    streamKey);
         }
     }
 
@@ -233,6 +219,24 @@ public class RedisStreamsConnectorTest {
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer with metadata test", e);
         }
+    }
+
+    private RedisClient connectToRedisContainer() {
+        return RedisClient.create(RedisURI.create("localhost", REDIS_CONTAINER.getMappedPort(REDIS_PORT)));
+    }
+
+    private static void assertThatMessageIsAckedOnRedis(String messageId, RedisClient redisClient,
+            String streamKey) {
+        List<StreamMessage<String, String>> xreadgroup = redisClient.connect()
+                .sync()
+                .xreadgroup(
+                        Consumer.from(TEST__CONSUMER_GROUP, TEST_CONSUMER_ID),
+                        XReadArgs.Builder.block(1000),
+                        XReadArgs.StreamOffset.from(streamKey, ZERO_OFFSET));
+        assertThat(xreadgroup).map(StreamMessage::getId).doesNotContain(messageId);
+
+        PendingMessages pending = redisClient.connect().sync().xpending(streamKey, TEST__CONSUMER_GROUP);
+        assertThat(pending.getCount()).isZero();
     }
 
 }
