@@ -65,8 +65,8 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
      * {@inheritDoc}
      */
     @Override
-    public Uni<Integer> xAck(String stream, String group, String id) {
-        return redisAPI.xack(List.of(stream, group, id)).map(Response::toInteger);
+    public Uni<Long> xAck(String stream, String group, String id) {
+        return redisAPI.xack(List.of(stream, group, id)).map(Response::toLong);
     }
 
     /**
@@ -169,5 +169,10 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
             }
         }
         return new StreamEntry(streamKey, entryId, fields);
+    }
+
+    @Override
+    public void close() {
+        // do nothing, quarkus redis extension will close the redisAPIs upon shutdown
     }
 }

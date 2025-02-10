@@ -80,14 +80,14 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      */
     public static final String REDIS_STREAM_CONNECTION_KEY_CONFIG = "connection-key";
 
-    @Inject
-    private Logger log;
+    private final Logger log = Logger.getLogger(RedisStreamsConnector.class);
 
     private final RedisStreamsProducer redisStreamsProducer;
     private String consumer;
     private volatile boolean consumerCancelled = false;
     private volatile boolean logSubscription = true;
     private final List<Flow.Subscription> subscriptions = new CopyOnWriteArrayList<>();
+    private final List<RedisStreams> redisStreams = new CopyOnWriteArrayList<>();
     private final Set<String> underProcessing = Collections.synchronizedSet(new HashSet<>());
     private final ReducableSemaphore shutdownPermit = new ReducableSemaphore(1);
     private final Integer gracefulShutdownTimeout;
@@ -139,6 +139,8 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+        // close redis connections
+        redisStreams.forEach(RedisStreams::close);
     }
 
     /**
@@ -164,6 +166,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         String group = incomingConfig.getGroup();
 
         RedisStreams redisAPI = redisStreamsProducer.produce(incomingConfig.getConnectionKey());
+        redisStreams.add(redisAPI);
         if (!redisAPI.existGroup(streamKey, group)) {
             redisAPI.xGroupCreate(streamKey, group);
             log.infov("Created consumer group [{0}] on redis stream [{1}]", group, streamKey);
@@ -318,8 +321,8 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      * @return a CompletionStage representing the acknowledgment
      */
     private Uni<Void> ack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
-        Uni<Integer> integerUni = redisAPI.xAck(incomingConfig.getStreamKey(), incomingConfig.getGroup(), streamEntry.id());
-        return integerUni
+        Uni<Long> longUni = redisAPI.xAck(incomingConfig.getStreamKey(), incomingConfig.getGroup(), streamEntry.id());
+        return longUni
                 .invoke(result -> log.tracev("ACK completed for id [{0}] with result [{1}]", streamEntry.id(), result)
                 )
                 .onFailure()

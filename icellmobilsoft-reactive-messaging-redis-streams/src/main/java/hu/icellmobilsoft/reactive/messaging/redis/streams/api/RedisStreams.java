@@ -51,7 +51,7 @@ public interface RedisStreams {
      * @return a Uni containing the number of acknowledged messages
      * @see <a href="https://redis.io/docs/latest/commands/xack">XACK</a>
      */
-    Uni<Integer> xAck(String stream, String group, String id);
+    Uni<Long> xAck(String stream, String group, String id);
 
     /**
      * Adds a message to the specified stream.
@@ -104,5 +104,10 @@ public interface RedisStreams {
      * @see <a href="https://redis.io/docs/latest/commands/xreadgroup">XREADGROUP</a>
      */
     Uni<List<StreamEntry>> xReadGroup(String stream, String group, String consumer, Integer count, Integer blockMs);
+
+    /**
+     * Close underlying connections.
+     */
+    default void close(){}
 
 }
