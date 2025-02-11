@@ -1,0 +1,15 @@
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:imagesdir: pic
+
+= Quarkus Redis Stream
+
+The Redis Streams Connector integrates with Redis Streams to provide a reactive messaging solution using MicroProfile Reactive Messaging with.
+This connector supports both consuming (inbound) and producing (outgoing) messages to/from Redis Streams.
+
+include::maven-modules.adoc[leveloffset=+1]
+include::connector/connector-core.adoc[leveloffset=+1]
+include::connector/configuration-reference.adoc[leveloffset=+1]
+include::examples/examples.adoc[leveloffset=+1]

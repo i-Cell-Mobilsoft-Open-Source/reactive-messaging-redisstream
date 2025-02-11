@@ -1,0 +1,124 @@
+= Connector overview
+
+The connector core module aims to integrate the Redis Streams API with the Reactive Messaging Specification without depending on a specific Redis SDK.
+
+== Consuming Messages
+
+The inbound connector reads messages from a Redis Stream as a consumer group using the https://redis.io/docs/latest/commands/xreadgroup/[`XREADGROUP`] command.
+
+=== Consumer Group Setup
+
+* If the specified consumer group does not exist, it is automatically created.
+* Each connector instance uses a unique consumer ID (UUID) to track message processing.
+
+=== Incoming Message
+
+Incoming stream entries are converted to `org.eclipse.microprofile.reactive.messaging.Message` instances with a String payload and `IncomingRedisStreamMetadata` metadata.
+
+* The payload is extracted from the stream entries' `message` field by default.
+** The field can be configured via the `payload-field` configuration property (Optional).
+* `IncomingRedisStreamMetadata` consists of:
+** The stream key from which the message was read.
+** Stream entry ID (as generated on Redis).
+** All additional fields (excluding the payload-field) in a map.
+
+=== Message Processing
+
+* Stream entries are acknowledged on Redis using (https://redis.io/docs/latest/commands/xack/[`XACK`]) if the `org.eclipse.microprofile.reactive.messaging.Message` has been acked as per the Microprofile Reactive Messaging specification.
+You can use the `@Acknowledgment` annotation to control the acknowledgment behavior.
+* Expired messages (based on the `ttl` field) are automatically acknowledged and skipped.
+* `XREADGROUP` commands are retried with exponential backoff (1s to 30s) on processing failures.
+
+==== Example Configuration
+
+[source,properties]
+----
+mp.messaging.incoming.my-channel.connector=icellmobilsoft-redis-streams #<1>
+mp.messaging.incoming.my-channel.stream-key=mystream #<2>
+mp.messaging.incoming.my-channel.group=mygroup #<3>
+mp.messaging.incoming.my-channel.payload-field=message #<4>
+mp.messaging.incoming.my-channel.xread-count=10 #<5>
+mp.messaging.incoming.my-channel.xread-block-ms=10000 #<6>
+----
+
+<1> Activate the redis stream connector for the incoming channel called `my-channel`.
+<2> The stream key on redis to read messages from.
+<3> The consumer group name.
+<4> The field name to extract the payload from the stream entry.
+<5> The number of messages to read in a single `XREADGROUP` call.
+The `COUNT` parameter of the `XREADGROUP` command.
+<6> The milliseconds to block during `XREADGROUP` calls.
+The `BLOCK` parameter of the `XREADGROUP` command.
+
+== Producing Messages
+
+The outbound connector publishes messages to a Redis Stream using https://redis.io/docs/latest/commands/xadd/[`XADD`].
+
+=== Outgoing Message
+
+Outgoing `org.eclipse.microprofile.reactive.messaging.Message` instances with a String payload are converted to stream entries.
+
+* The payload is sent as the stream entries' `message` field by default.
+** The field can be configured via the `payload-field` configuration property (Optional).
+* Additional fields can be added via `RedisStreamMetadata`.
+
+[source,java]
+----
+@Outgoing("out-channel")
+public Message<String> produce() {
+    return Message.of("Hello World!")
+        .addMetadata(new RedisStreamMetadata()
+                            .withAdditionalField("additionalKey", "additional value")
+        );
+//    The produced stream entry will be like:
+//      1) 1) "out-stream"
+//         2) 1) 1) "1739262584638-0"
+//            2) 1) "message"
+//               2) "Hello World!"
+//               3) "additionalKey"
+//               4) "Test-additional value"
+}
+----
+
+=== Stream Trimming
+
+* Use `xadd-maxlen` to trim by entry count (`MAXLEN` parameter of the `XADD` command).
+** Exact trimming can be enabled by setting `xadd-exact-maxlen` to `true` (defaults to false since almost exact is more efficient).
+* Use `xadd-ttl-ms` to compute an expiration timestamp
+** Adds a `ttl` field with a value of (current epoch time + TTL), in order to consumers be able to skip expired messages.
+** It also sets a minimum ID for stream trimming (`MINID` parameter of the `XADD` command).
+* If both are set, `xadd-maxlen` takes precedence.
+
+==== Example Configuration
+
+[source,properties]
+----
+mp.messaging.outgoing.out-channel.connector=icellmobilsoft-redis-streams #<1>
+mp.messaging.outgoing.out-channel.stream-key=mystream #<2>
+mp.messaging.incoming.out-channel.payload-field=message #<3>
+mp.messaging.outgoing.out-channel.xadd-maxlen=1000 #<4>
+mp.messaging.outgoing.out-channel.xadd-exact-maxlen=true #<5>
+#mp.messaging.outgoing.out-channel.xadd-ttl-ms=1000 #<6>
+----
+
+<1> Activate the redis stream connector for the incoming channel called `my-channel`.
+<2> The stream key on redis to read messages from.
+<3> The field name to use as the payload in the stream entry.
+<4> The maximum number of entries to keep in the stream.
+<5> Enable exact trimming by entry count.
+<6> Possible trimming based on milliseconds to set the TTL for the stream entry.
+
+== Graceful Shutdown
+
+On shutdown:
+
+* New message consumption stops immediately.
+* In-flight messages are given up to `graceful-timeout-ms` (default: 60000ms) to complete.
+* Redis connections are closed after timeout or all messages are processed.
+
+Configure the timeout via:
+
+[source,properties]
+----
+mp.messaging.connector.icellmobilsoft-redis-streams.graceful-timeout-ms=30000
+----

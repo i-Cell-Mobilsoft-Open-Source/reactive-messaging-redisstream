@@ -1,0 +1,103 @@
+= Consuming Messages
+
+Example usage of the Redis Streams connector for consuming messages from a Redis Stream.
+
+== Pre-requisites:
+
+* Redis server running on localhost:6379 or dev-container from Redis extension.
+
+== Set up quarkus
+
+Add the following dependency to your project:
+
+.pom xml
+[source,xml]
+----
+<dependency>
+    <groupId>hu.icellmobilsoft.quarkus.extension</groupId>
+    <artifactId>quarkus-redisstream-extension</artifactId>
+</dependency>
+----
+
+== Configure the connector
+
+.MicroProfile configuration
+[source,yaml]
+----
+mp:
+  messaging:
+    incoming:
+      in-channel: #<1>
+        connector: icellmobilsoft-redis-streams #<2>
+        stream-key: mystream #<3>
+        group: mygroup #<4>
+        connection-key: my-redis-connection #<5>
+        payload-field: message #optional defaults to 'message'
+        xread-count: 10 #optional defaults to '1'
+        xread-block-ms: 10000 #optional defaults to '5000'
+    connector:
+      icellmobilsoft-redis-streams:
+        graceful-timeout-ms: 10000 #optional defaults to '60000' #<6>
+quarkus:
+  redis:
+    my-redis-connection: #<5>
+      hosts: redis://localhost:6379
+----
+
+<1> The incoming MP channel name.
+<2> Specify the connector to use.
+<3> The Redis stream key to read messages from.
+<4> The consumer group name.
+<5> The Redis connection reference to use.
+<6> Connector specific config to set the graceful timeout.
+
+== Implement the consumer
+
+=== Blocking implementation
+
+.Blocking consumer method
+[source,java]
+----
+@Incoming("in-channel") //<1>
+//@Blocking(ordered = false, value = "incoming-pool") //<2>
+//@Retry(maxRetries = 2) //<3>
+public void process(String message) {
+// Process the message
+}
+----
+
+<1> The incoming MP channel name.
+<2> Optional: Use the `@Blocking` annotation to specify parallel processing with a custom thread pool.
+Pool size can be set via the `smallrye.messaging.worker.incoming-pool.max-concurrency` configuration key.
+<3> Optional: Use the `@Retry` annotation from MP Fault Tolerance to control method retry behavior.
+
+=== Reactive implementation
+
+.Reactive consumer method
+[source,java]
+----
+@Incoming("in-channel") //<1>
+    public Uni<Void> consumeReactive(Message<String> message) {
+        return Uni.createFrom()
+                .item(message)
+                .invoke(this::processMessage) //<2>
+                .replaceWithVoid();
+    }
+
+    private void processMessage(Message<String> message) {
+        // process the message
+        message.getMetadata()
+                .get(IncomingRedisStreamMetadata.class)
+                .ifPresent(this::processMetadata); //<3>
+        message.ack(); //<4>
+    }
+
+    private void processMetadata(IncomingRedisStreamMetadata metadata) { //<3>
+            // process metadata
+    }
+----
+
+<1> The incoming MP channel name.
+<2> Process the message reactively.
+<3> Example on how to process the metadata.
+<4> Acknowledge the message manually.

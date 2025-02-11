@@ -1,0 +1,109 @@
+= Producing Messages
+
+Example usage of the Redis Streams connector for producing messages to a Redis Stream.
+
+== Pre-requisites:
+
+* Redis server running on localhost:6379 or dev-container from Redis extension.
+
+== Set up quarkus
+
+Add the following dependency to your project:
+
+.pom xml
+[source,xml]
+----
+<dependency>
+    <groupId>hu.icellmobilsoft.quarkus.extension</groupId>
+    <artifactId>quarkus-redisstream-extension</artifactId>
+</dependency>
+----
+
+== Configure the connector
+
+.MicroProfile configuration
+[source,yaml]
+----
+mp:
+  messaging:
+    outgoing:
+      out-channel: #<1>
+        connector: icellmobilsoft-redis-streams #<2>
+        stream-key: mystream #<3>
+        connection-key: my-redis-connection #<4>
+        payload-field: message #optional defaults to 'message'
+#        xadd-maxlen: 10 #optional
+#        xadd-exact-maxlen: true #optional defaults to 'false'
+        xadd-ttl-ms: 10000 #optional
+quarkus:
+  redis:
+    my-redis-connection: #<4>
+      hosts: redis://localhost:6379
+----
+
+<1> The outgoing MP channel name.
+<2> Specify the connector to use.
+<3> The Redis stream key to read messages from.
+<4> The Redis connection reference to use.
+
+== Implement the Producer
+
+=== Simple producer
+.Emitter based producer with metadata
+[source,java]
+----
+    @Inject
+    @Channel("out-channel") //<1>
+    Emitter<String> emitter;
+
+
+    public void produceWithMetadata() {
+        emitter.send("Hello"); //<2>
+    }
+----
+
+<1> The incoming MP channel name.
+<2> The message payload
+
+The resulting message will be like:
+----
+     1) 1) "mystream"
+        2) 1) 1) "1739262584638-0"
+           2) 1) "message"
+              2) "Hello"
+              3) "ttl"
+              4) "1739262594638"
+----
+=== With custom metadata
+.Emitter based producer with metadata
+[source,java]
+----
+    @Inject
+    @Channel("out-channel") //<1>
+    Emitter<String> emitter;
+
+
+    public void produceWithMetadata() {
+        emitter.send(
+                ContextAwareMessage.of("Hello") //<2>
+                        .addMetadata(new RedisStreamMetadata()
+                            .withAdditionalField("otherKey", "Other value") //<3>
+        ));
+    }
+----
+
+<1> The incoming MP channel name.
+<2> The message payload
+<3> Additional fields
+
+The resulting message will be like:
+----
+     1) 1) "mystream"
+        2) 1) 1) "1739262584638-0"
+           2) 1) "message"
+              2) "Hello"
+              3) "otherKey"
+              4) "Other value"
+              5) "ttl"
+              6) "1739262594638"
+----

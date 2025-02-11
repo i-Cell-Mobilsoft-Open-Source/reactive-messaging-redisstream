@@ -1,0 +1,4 @@
+= Examples
+
+include::example-consumer.adoc[leveloffset=+1]
+include::example-producer.adoc[leveloffset=+1]

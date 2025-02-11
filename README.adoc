@@ -1,0 +1,4 @@
+= Quarkus Redis Stream
+
+The Redis Streams Connector integrates with Redis Streams to provide a reactive messaging solution using MicroProfile Reactive Messaging with.
+This connector supports both consuming (inbound) and producing (outgoing) messages to/from Redis Streams.

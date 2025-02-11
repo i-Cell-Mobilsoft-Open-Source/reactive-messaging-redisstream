@@ -1,0 +1,72 @@
+= Configuration
+
+The connector is identified by `icellmobilsoft-redis-streams`.
+Below are the configuration attributes available for both inbound and outbound channels.
+
+[cols="2,5,1,1,1"]
+|===
+| Attribute | Description | Default | Mandatory | Direction
+
+| `connection-key`
+| The Redis connection key to use.
+Can be implementation specific in case of the quarkus extension
+it is the key used to define the redis connection according to the quarkus redis client.
+For example if you use `quarkus.redis.*my-redis*.hosts` configuration then you can use `my-redis` as connection key.
+| `default`
+| No
+| INCOMING_AND_OUTGOING
+
+| `stream-key`
+| The Redis key holding the stream items.
+| -
+| Yes
+| INCOMING_AND_OUTGOING
+
+| `payload-field`
+| The stream entry field name containing the message payload.
+| `message`
+| No
+| INCOMING_AND_OUTGOING
+
+| `group`
+| The consumer group of the Redis stream to read from.
+| -
+| Yes
+| INCOMING
+
+| `xread-count`
+| The maximum number of entries to receive per `XREADGROUP` call.
+| `1`
+| No
+| INCOMING
+
+| `xread-block-ms`
+| The milliseconds to block during `XREADGROUP` calls.
+| `5000`
+| No
+| INCOMING
+
+| `xadd-maxlen`
+| The maximum number of entries to keep in the stream (trims old entries).
+| -
+| No
+| OUTGOING
+
+| `xadd-exact-maxlen`
+| Use exact trimming for `MAXLEN` (requires Redis 6.2+).
+| `false`
+| No
+| OUTGOING
+
+| `xadd-ttl-ms`
+| Milliseconds to keep an entry in the stream (uses `minid` trimming).
+| -
+| No
+| OUTGOING
+
+| `graceful-timeout-ms`
+| Milliseconds to wait for the consumed messages to finish processing before closing the consumer group.
+| `60000`
+| No
+| CONNECTOR
+|===
