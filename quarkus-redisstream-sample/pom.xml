@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>hu.icellmobilsoft.quarkus.redisstream</groupId>
-        <artifactId>quarkus-redisstream-poc</artifactId>
+        <artifactId>quarkus-redisstream-messaging-parent</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 
@@ -21,12 +21,12 @@
         <dependency>
             <groupId>hu.icellmobilsoft.quarkus.extension</groupId>
             <artifactId>quarkus-redisstream-extension</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>hu.icellmobilsoft.quarkus.extension</groupId>
             <artifactId>quarkus-redisstream-extension-deployment</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>${project.version}</version>
             <optional>true</optional>
             <scope>test</scope>
         </dependency>
@@ -144,7 +144,7 @@
                 <skipITs>false</skipITs>
                 <quarkus.native.enabled>true</quarkus.native.enabled>
                 <quarkus.native.container-build>true</quarkus.native.container-build>
-                <quarkus.native.builder-image>quay.io/quarkus/ubi-quarkus-mandrel-builder-image:jdk-21</quarkus.native.builder-image>
+                <quarkus.native.builder-image>quay.io/quarkus/ubi-quarkus-mandrel-builder-image:jdk-17</quarkus.native.builder-image>
                 <quarkus.container-image.build>true</quarkus.container-image.build>
                 <quarkus.container-image.tag>${project.version}</quarkus.container-image.tag>
             </properties>
