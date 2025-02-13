@@ -23,7 +23,7 @@ public interface RedisStreams {
      * @return true if the group exists, false otherwise
      * @see <a href="https://redis.io/docs/latest/commands/xinfo">XINFO</a>
      */
-    boolean existGroup(String stream, String group);
+    Uni<Boolean> existGroup(String stream, String group);
 
     /**
      * Creates a new consumer group in the specified stream.
@@ -36,7 +36,7 @@ public interface RedisStreams {
      * @return redis operation result
      * @see <a href="https://redis.io/docs/latest/commands/xgroup-create/">XGROUP CREATE</a>
      */
-    String xGroupCreate(String stream, String group);
+    Uni<String> xGroupCreate(String stream, String group);
 
     /**
      * Acknowledges the processing of a message in the specified stream by the specified group.

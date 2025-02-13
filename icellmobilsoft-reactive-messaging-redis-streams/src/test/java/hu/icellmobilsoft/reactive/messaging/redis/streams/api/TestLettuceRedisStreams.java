@@ -4,8 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-
-import org.jboss.logging.Logger;
+import java.util.stream.StreamSupport;
 
 import io.lettuce.core.ClientOptions;
 import io.lettuce.core.Consumer;
@@ -47,27 +46,36 @@ public class TestLettuceRedisStreams implements RedisStreams {
     }
 
     @Override
-    public boolean existGroup(String stream, String group) {
-        try (StatefulRedisConnection<String, String> connection = redisClient.connect()) {
-            List<Object> groups = connection.sync().xinfoGroups(stream);
-            return groups.stream()
-                    .filter(o -> o instanceof List)
-                    .map(o -> (List) o)
-                    .filter(l -> l.size() > 2)
-                    .map(l -> l.get(1))
-                    .anyMatch(group::equals);
-        } catch (Exception e) {
-            Logger.getLogger(TestLettuceRedisStreams.class)
-                    .errorv("Redis exception during checking group [{0}] on stream [{1}]: [{2}]", group, stream, e.getLocalizedMessage());
-            return false;
-        }
+    public Uni<Boolean> existGroup(String stream, String group) {
+        return UniReactorConverters.<List<Object>> fromMono()
+                .from(redisClient.connect().reactive().xinfoGroups(stream).collectList())
+                .onItemOrFailure()
+                .transform((response, throwable) -> {
+                    if (throwable != null) {
+                        return false;
+                    }
+                    if (response == null) {
+                        return false;
+                    }
+                    return StreamSupport.stream(response.spliterator(), false)
+                            .filter(o -> o instanceof List)
+                            .map(o -> (List) o)
+                            .filter(l -> l.size() > 2)
+                            .map(l -> l.get(1))
+                            .anyMatch(group::equals);
+                });
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
-    public String xGroupCreate(String stream, String group) {
-        try (StatefulRedisConnection<String, String> connection = redisClient.connect()) {
-            return connection.sync().xgroupCreate(XReadArgs.StreamOffset.from(stream, "0-0"), group, XGroupCreateArgs.Builder.mkstream());
-        }
+    public Uni<String> xGroupCreate(String stream, String group) {
+        return UniReactorConverters.<String> fromMono()
+                .from(
+                        redisClient.connect()
+                                .reactive()
+                                .xgroupCreate(XReadArgs.StreamOffset.from(stream, "0-0"), group, XGroupCreateArgs.Builder.mkstream()));
     }
 
     @Override

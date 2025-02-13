@@ -45,9 +45,9 @@ import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
 
 /**
  * Microprofile Reactive Streams connector for Redis Streams integration.
- * 
- * @since 1.0.0
+ *
  * @author mark.petrenyi
+ * @since 1.0.0
  */
 @ApplicationScoped
 @Connector(RedisStreamsConnector.ICELLMOBILSOFT_REDIS_STREAMS_CONNECTOR)
@@ -89,7 +89,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     private final RedisStreamsProducer redisStreamsProducer;
     private String consumer;
     private volatile boolean consumerCancelled = false;
-    private volatile boolean logSubscription = true;
+    private volatile boolean prudentRun = true;
     private final List<Flow.Subscription> subscriptions = new CopyOnWriteArrayList<>();
     private final List<RedisStreams> redisStreams = new CopyOnWriteArrayList<>();
     private final Set<String> underProcessing = Collections.synchronizedSet(new HashSet<>());
@@ -121,7 +121,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     /**
      * Closes the connector, cancelling all subscriptions.
      *
-     * @param ignored
+     * @param event
      *            the shutdown event
      */
     public void terminate(@Observes(notifyObserver = Reception.IF_EXISTS) @Priority(10000) @BeforeDestroyed(ApplicationScoped.class) Object event) {
@@ -166,15 +166,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     @Override
     public Flow.Publisher<? extends Message<?>> getPublisher(Config config) {
         RedisStreamsConnectorIncomingConfiguration incomingConfig = new RedisStreamsConnectorIncomingConfiguration(config);
-        String streamKey = incomingConfig.getStreamKey();
-        String group = incomingConfig.getGroup();
 
         RedisStreams redisAPI = redisStreamsProducer.produce(incomingConfig.getConnectionKey());
         redisStreams.add(redisAPI);
-        if (!redisAPI.existGroup(streamKey, group)) {
-            redisAPI.xGroupCreate(streamKey, group);
-            log.infov("Created consumer group [{0}] on redis stream [{1}]", group, streamKey);
-        }
         return xreadMulti(redisAPI, incomingConfig);
     }
 
@@ -198,7 +192,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 // Log first or recovered subscription to multi
                 .onSubscription()
                 .invoke(() -> {
-                    if (logSubscription) {
+                    if (prudentRun) {
                         log.infov(
                                 "Subscribing channel [{0}] to redis stream [{1}] consuming group [{2}] as consumer [{3}] using redis connection key [{4}]",
                                 incomingConfig.getChannel(),
@@ -206,8 +200,6 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                                 incomingConfig.getGroup(),
                                 consumer,
                                 incomingConfig.getConnectionKey());
-                        // don't log subscription again
-                        logSubscription = false;
                     }
                 })
                 // Collect subscriptions in order to cancel them on shutdown
@@ -242,7 +234,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                                 "Uncaught exception while processing messages from channel [{0}], trying to recover..",
                                 incomingConfig.getChannel());
                         // ensure that the subscription is logged again to have information on recovery
-                        logSubscription = true;
+                        prudentRun = true;
                     }
                     // try to recover only if the consumer is not cancelled
                     return !consumerCancelled;
@@ -387,32 +379,49 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      * @return a Uni containing a list of stream entries read from the Redis stream
      */
     private Uni<List<StreamEntry>> xReadMessage(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
-        return redisAPI
-                .xReadGroup(
-                        incomingConfig.getStreamKey(),
-                        incomingConfig.getGroup(),
-                        consumer,
-                        incomingConfig.getXreadCount(),
-                        incomingConfig.getXreadBlockMs(),
-                        incomingConfig.getXreadNoack())
-                // Redis connection error while waiting for XREADGROUP response
-                .onFailure()
-                .invoke(
-                        e -> log.errorv(
-                                e,
-                                "Redis error occured while waiting for XREADGROUP on channel [{0}], error: [{1}]",
-                                incomingConfig.getChannel(),
-                                e.getMessage())
-                )
-                .onTermination()
-                .invoke(
-                        (items, throwable, isCancelled) -> log.tracev(
-                                "Terminating XREADGROUP call on channel [{0}], items: [{1}], throwable:[{2}], isCancelled:[{3}]",
-                                incomingConfig.getChannel(),
-                                items,
-                                throwable,
-                                isCancelled)
-                );
+        String streamKey = incomingConfig.getStreamKey();
+        String group = incomingConfig.getGroup();
+        return Uni.createFrom().item(prudentRun).flatMap(prudent -> {
+            if (!prudent) {
+                return Uni.createFrom().item(true);
+            }
+            return redisAPI.existGroup(streamKey, group);
+        })
+                .flatMap(exists -> {
+                    if (!exists) {
+                        return redisAPI.xGroupCreate(streamKey, group);
+                    }
+                    return Uni.createFrom().nullItem();
+                })
+                // we created the group so prudent run is not needed anymore
+                .invoke(() -> prudentRun = false)
+                .replaceWith(
+                        redisAPI
+                                .xReadGroup(
+                                        streamKey,
+                                        group,
+                                        consumer,
+                                        incomingConfig.getXreadCount(),
+                                        incomingConfig.getXreadBlockMs(),
+                                        incomingConfig.getXreadNoack())
+                                // Redis connection error while waiting for XREADGROUP response
+                                .onFailure()
+                                .invoke(
+                                        e -> log.errorv(
+                                                e,
+                                                "Redis error occured while waiting for XREADGROUP on channel [{0}], error: [{1}]",
+                                                incomingConfig.getChannel(),
+                                                e.getMessage())
+                                )
+                                .onTermination()
+                                .invoke(
+                                        (items, throwable, isCancelled) -> log.tracev(
+                                                "Terminating XREADGROUP call on channel [{0}], items: [{1}], throwable:[{2}], isCancelled:[{3}]",
+                                                incomingConfig.getChannel(),
+                                                items,
+                                                throwable,
+                                                isCancelled)
+                                ));
     }
 
     /**

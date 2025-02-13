@@ -41,24 +41,36 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
      * {@inheritDoc}
      */
     @Override
-    public boolean existGroup(String stream, String group) {
-        try {
-            Log.tracev("Checking consumer group [{0}] on stream [{1}]", group, stream);
-            Response groups = redisAPI.xinfoAndAwait(List.of("GROUPS", stream));
-            return StreamSupport.stream(groups.spliterator(), false).map(r -> r.get("name")).map(Response::toString).anyMatch(group::equals);
-        } catch (Exception e) {
-            Log.debugv("Redis exception during checking group [{0}] on stream [{1}]: [{2}]", group, stream, e.getLocalizedMessage());
-            return false;
-        }
+    public Uni<Boolean> existGroup(String stream, String group) {
+        return redisAPI.xinfo(List.of("GROUPS", stream))
+                .onSubscription()
+                .invoke(() -> Log.tracev("Checking consumer group [{0}] on stream [{1}]", group, stream))
+                .onItemOrFailure()
+                .transform((response, throwable) -> {
+                    if (throwable != null) {
+                        Log.debugv(
+                                "Redis exception during checking group [{0}] on stream [{1}]: [{2}]",
+                                group,
+                                stream,
+                                throwable.getLocalizedMessage());
+                        return false;
+                    }
+                    if (response == null) {
+                        return false;
+                    }
+                    return StreamSupport.stream(response.spliterator(), false)
+                            .map(r -> r.get("name"))
+                            .map(Response::toString)
+                            .anyMatch(group::equals);
+                });
     }
 
     /**
      * {@inheritDoc}
      */
     @Override
-    public String xGroupCreate(String stream, String group) {
-        Response create = redisAPI.xgroupAndAwait(List.of("CREATE", stream, group, "0", "MKSTREAM"));
-        return create.toString();
+    public Uni<String> xGroupCreate(String stream, String group) {
+        return redisAPI.xgroup(List.of("CREATE", stream, group, "0", "MKSTREAM")).map(Response::toString);
     }
 
     /**
@@ -122,7 +134,7 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
             xReadArgs.add("BLOCK");
             xReadArgs.add(String.valueOf(blockMs));
         }
-        if(Boolean.TRUE.equals(noack)) {
+        if (Boolean.TRUE.equals(noack)) {
             xReadArgs.add("NOACK");
         }
         xReadArgs.add("STREAMS");
