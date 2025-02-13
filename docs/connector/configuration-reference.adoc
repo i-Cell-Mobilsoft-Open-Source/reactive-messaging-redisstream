@@ -46,6 +46,12 @@ For example if you use `quarkus.redis.*my-redis*.hosts` configuration then you c
 | No
 | INCOMING
 
+| `xread-noack`
+| Include the `NOACK` parameter in the `XREADGROUP` call
+| `false`
+| No
+| INCOMING
+
 | `xadd-maxlen`
 | The maximum number of entries to keep in the stream (trims old entries).
 | -

@@ -103,7 +103,7 @@ public interface RedisStreams {
      * @return a Uni containing a list of stream entries
      * @see <a href="https://redis.io/docs/latest/commands/xreadgroup">XREADGROUP</a>
      */
-    Uni<List<StreamEntry>> xReadGroup(String stream, String group, String consumer, Integer count, Integer blockMs);
+    Uni<List<StreamEntry>> xReadGroup(String stream, String group, String consumer, Integer count, Integer blockMs, Boolean noack);
 
     /**
      * Close underlying connections.

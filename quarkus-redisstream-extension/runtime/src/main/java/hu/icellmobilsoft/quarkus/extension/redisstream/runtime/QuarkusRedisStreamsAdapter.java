@@ -109,7 +109,7 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
      * {@inheritDoc}
      */
     @Override
-    public Uni<List<StreamEntry>> xReadGroup(String stream, String group, String consumer, Integer count, Integer blockMs) {
+    public Uni<List<StreamEntry>> xReadGroup(String stream, String group, String consumer, Integer count, Integer blockMs, Boolean noack) {
         List<String> xReadArgs = new ArrayList<>();
         xReadArgs.add("GROUP");
         xReadArgs.add(group);
@@ -121,6 +121,9 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
         if (blockMs != null) {
             xReadArgs.add("BLOCK");
             xReadArgs.add(String.valueOf(blockMs));
+        }
+        if(Boolean.TRUE.equals(noack)) {
+            xReadArgs.add("NOACK");
         }
         xReadArgs.add("STREAMS");
         xReadArgs.add(stream);

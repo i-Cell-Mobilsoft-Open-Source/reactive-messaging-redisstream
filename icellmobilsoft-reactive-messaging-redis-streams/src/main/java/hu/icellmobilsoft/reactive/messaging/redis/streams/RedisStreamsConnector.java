@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
@@ -61,6 +62,9 @@ import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
 @ConnectorAttribute(name = "xread-count", description = "The maximum number of entries to receive upon an XREADGROUP call", type = "int",
         defaultValue = "1", direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xread-block-ms", description = "The milliseconds to wait in an XREADGROUP call", type = "int", defaultValue = "5000",
+        direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "xread-noack", description = "Include the NOACK parameter in the XREADGROUP call", type = "boolean",
+        defaultValue = "false",
         direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xadd-maxlen", description = "The maximum number of entries to keep in the stream", type = "int",
         direction = ConnectorAttribute.Direction.OUTGOING)
@@ -285,6 +289,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         }
         return ContextAwareMessage.of(payload)
                 .withAck(() -> ack(streamEntry, redisAPI, incomingConfig).subscribeAsCompletionStage())
+                .withNack(t -> nack(streamEntry, t, incomingConfig))
                 .addMetadata(incomingRedisStreamMetadata);
     }
 
@@ -309,6 +314,39 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         return true;
     }
 
+    private Uni<Void> ack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
+        Uni<Void> ackCall;
+        if (Boolean.TRUE.equals(incomingConfig.getXreadNoack())) {
+            // XREAD was called with NOACK so no need to call XACK command
+            ackCall = Uni.createFrom().voidItem();
+        } else {
+            ackCall = callXack(streamEntry, redisAPI, incomingConfig);
+        }
+        return ackCall
+                // return permit after item or failure
+                .invoke(() -> {
+                    underProcessing.remove(streamEntry.id());
+                    shutdownPermit.release();
+                });
+    }
+
+    private CompletionStage<Void> nack(StreamEntry streamEntry, Throwable t, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
+        return Uni.createFrom()
+                .voidItem()
+                // return permit after item or failure
+                .invoke(() -> {
+                    log.errorv(
+                            t,
+                            "NACK received for entry:[{0}] on channel: [{1}] by consumer group:[{2}]",
+                            streamEntry.id(),
+                            incomingConfig.getChannel(),
+                            incomingConfig.getGroup());
+                    underProcessing.remove(streamEntry.id());
+                    shutdownPermit.release();
+                })
+                .subscribeAsCompletionStage();
+    }
+
     /**
      * Send ACK after successful processing of a stream entry.
      *
@@ -320,7 +358,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      *            the incoming configuration
      * @return a CompletionStage representing the acknowledgment
      */
-    private Uni<Void> ack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
+    private Uni<Void> callXack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         Uni<Long> longUni = redisAPI.xAck(incomingConfig.getStreamKey(), incomingConfig.getGroup(), streamEntry.id());
         return longUni
                 .invoke(result -> log.tracev("ACK completed for id [{0}] with result [{1}]", streamEntry.id(), result)
@@ -335,12 +373,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                             incomingConfig.getGroup());
                     return null;
                 })
-                .replaceWithVoid()
-                // return permit after item or failure
-                .invoke(() -> {
-                    underProcessing.remove(streamEntry.id());
-                    shutdownPermit.release();
-                });
+                .replaceWithVoid();
     }
 
     /**
@@ -360,7 +393,8 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                         incomingConfig.getGroup(),
                         consumer,
                         incomingConfig.getXreadCount(),
-                        incomingConfig.getXreadBlockMs())
+                        incomingConfig.getXreadBlockMs(),
+                        incomingConfig.getXreadNoack())
                 // Redis connection error while waiting for XREADGROUP response
                 .onFailure()
                 .invoke(

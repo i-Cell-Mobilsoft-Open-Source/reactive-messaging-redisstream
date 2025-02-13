@@ -98,13 +98,13 @@ public class TestLettuceRedisStreams implements RedisStreams {
     }
 
     @Override
-    public Uni<List<StreamEntry>> xReadGroup(String stream, String group, String consumer, Integer count, Integer blockMs) {
+    public Uni<List<StreamEntry>> xReadGroup(String stream, String group, String consumer, Integer count, Integer blockMs, Boolean noack) {
         StatefulRedisConnection<String, String> connection = redisClient.connect();
         Mono<List<StreamEntry>> listMono = connection
                 .reactive()
                 .xreadgroup(
                         Consumer.from(group, consumer),
-                        XReadArgs.Builder.count(count).block(blockMs),
+                        XReadArgs.Builder.count(count).block(blockMs).noack(Boolean.TRUE.equals(noack)),
                         XReadArgs.StreamOffset.lastConsumed(stream))
                 .map(sm -> new StreamEntry(stream, sm.getId(), sm.getBody()))
                 .collectList();
