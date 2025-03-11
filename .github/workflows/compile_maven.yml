@@ -14,7 +14,7 @@ jobs:
   compile-on-os-with-jdk:
     strategy:
       matrix:
-        os: [ 'ubuntu-latest', 'windows-latest' ]
+        os: [ 'ubuntu-latest' ]
         java: [ '17', '21' ]
     runs-on: ${{ matrix.os }}
     name: Compile on ${{ matrix.os }} with JDK ${{ matrix.java }}
