@@ -12,14 +12,18 @@ import java.util.concurrent.TimeoutException;
 
 import org.jboss.logging.JBossLogManagerProvider;
 import org.jboss.weld.junit5.EnableWeld;
+import org.jboss.weld.junit5.ExplicitParamInjection;
 import org.jboss.weld.junit5.WeldInitiator;
 import org.jboss.weld.junit5.WeldJunit5Extension;
 import org.jboss.weld.junit5.WeldSetup;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.ShellStrategy;
@@ -115,12 +119,23 @@ public class RedisStreamsConnectorTest {
         }
     }
 
+    @BeforeEach
+    @ExplicitParamInjection
+    void setUp(TestInfo testInfo) {
+        System.out.println("Test starting: " + testInfo.getDisplayName());
+    }
+
+    @AfterEach
+    @ExplicitParamInjection
+    void tearDown(TestInfo testInfo) {
+        System.out.println("Test finished: " + testInfo.getDisplayName());
+    }
+
     /**
      * Test consumer.
      */
     @Test
     void testConsumer() {
-        System.out.println("Running testConsumer test");
         String streamKey = "in-stream";
         // given we have redis
         try (RedisClient redisClient = connectToRedisContainer()) {
@@ -134,11 +149,6 @@ public class RedisStreamsConnectorTest {
 
             // And the message should be removed from the stream and the message should be acknowledged
             assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
         }
     }
 
@@ -168,11 +178,6 @@ public class RedisStreamsConnectorTest {
             });
             // And the message should be removed from the stream and the message should be acknowledged
             assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
         }
     }
 
@@ -200,11 +205,6 @@ public class RedisStreamsConnectorTest {
                 assertThat(sm).extracting(StreamMessage::getBody).extracting(m -> m.get(DEFAULT_MESSAGE_KEY)).isEqualTo(message);
                 assertThat(sm).extracting(StreamMessage::getBody).extracting(m -> m.get("ttl")).isNotNull();
             });
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer test", e);
         }
@@ -237,11 +237,6 @@ public class RedisStreamsConnectorTest {
                         .extracting(m -> m.get(TestProducer.ADDITIONAL_FIELD_KEY))
                         .isEqualTo(additionalField);
             });
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer with metadata test", e);
         }

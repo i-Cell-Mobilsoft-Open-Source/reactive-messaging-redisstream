@@ -1,8 +1,8 @@
 package hu.icellmobilsoft.reactive.messaging.redis.streams.api;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.StreamSupport;
 
@@ -10,6 +10,7 @@ import io.lettuce.core.ClientOptions;
 import io.lettuce.core.Consumer;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
+import io.lettuce.core.TimeoutOptions;
 import io.lettuce.core.XAddArgs;
 import io.lettuce.core.XGroupCreateArgs;
 import io.lettuce.core.XReadArgs;
@@ -33,12 +34,13 @@ public class TestLettuceRedisStreams implements RedisStreams {
                 ClientOptions.builder()
                         .autoReconnect(false)
                         .suspendReconnectOnProtocolFailure(true)
+                        .timeoutOptions(TimeoutOptions.enabled(Duration.ofMinutes(1)))
                         .build());
     }
 
     @Override
     public void close() {
-        redisClient.shutdown(5, 10, TimeUnit.SECONDS);
+        redisClient.close();
     }
 
     @Override
@@ -76,6 +78,7 @@ public class TestLettuceRedisStreams implements RedisStreams {
 
     @Override
     public Uni<Long> xAck(String stream, String group, String id) {
+        System.out.println("trying to xack id: " + id);
         Mono<Long> xack = redisClient.connect().reactive().xack(stream, group, id);
         return UniReactorConverters.<Long> fromMono().from(xack);
     }
