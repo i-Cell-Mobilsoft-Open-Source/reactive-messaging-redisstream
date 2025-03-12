@@ -135,6 +135,11 @@ public class RedisStreamsConnectorTest {
             // And the message should be removed from the stream and the message should be acknowledged
             assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
         }
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
@@ -164,6 +169,11 @@ public class RedisStreamsConnectorTest {
             // And the message should be removed from the stream and the message should be acknowledged
             assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
         }
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -192,6 +202,11 @@ public class RedisStreamsConnectorTest {
             });
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer test", e);
+        }
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -224,6 +239,11 @@ public class RedisStreamsConnectorTest {
             });
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer with metadata test", e);
+        }
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 
