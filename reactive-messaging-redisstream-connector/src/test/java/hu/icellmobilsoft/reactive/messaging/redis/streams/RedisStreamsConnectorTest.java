@@ -112,20 +112,21 @@ public class RedisStreamsConnectorTest {
         // set mp config redis port
         System.setProperty(TestLettuceRedisStreamsProducer.TEST_REDIS_PORT_KEY, String.valueOf(REDIS_CONTAINER.getMappedPort(REDIS_PORT)));
 
-        new Thread(() -> {
-            try {
-                TimeUnit.MINUTES.sleep(5);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            System.err.println("------------ Thead dump ------------");
-            Thread.getAllStackTraces().forEach((thread, stackTrace) -> {
-                System.err.println("Thread: " + thread.getName());
-                for (StackTraceElement traceElement : stackTrace) {
-                    System.err.println("\tat " + traceElement);
-                }
-            });
-        }).start();
+        // NOTE: Teszteléshez Thread dump kinyerésére
+//        new Thread(() -> {
+//            try {
+//                TimeUnit.MINUTES.sleep(5);
+//            } catch (InterruptedException e) {
+//                throw new RuntimeException(e);
+//            }
+//            System.err.println("------------ Thead dump ------------");
+//            Thread.getAllStackTraces().forEach((thread, stackTrace) -> {
+//                System.err.println("Thread: " + thread.getName());
+//                for (StackTraceElement traceElement : stackTrace) {
+//                    System.err.println("\tat " + traceElement);
+//                }
+//            });
+//        }).start();
     }
 
     /**
