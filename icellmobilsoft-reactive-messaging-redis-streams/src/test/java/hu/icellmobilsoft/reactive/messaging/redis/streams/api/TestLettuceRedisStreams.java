@@ -38,11 +38,7 @@ public class TestLettuceRedisStreams implements RedisStreams {
 
     @Override
     public void close() {
-        try {
-            redisClient.shutdownAsync(1, 1, TimeUnit.SECONDS).get();
-        } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Lettuce connection close failed!", e);
-        }
+        redisClient.shutdown(5, 10, TimeUnit.SECONDS);
     }
 
     @Override
