@@ -94,7 +94,7 @@ public class TestLettuceRedisStreams implements RedisStreams {
     public Uni<String> xGroupCreate(String stream, String group) {
         return UniReactorConverters.<String> fromMono()
                 .from(
-                        redisClient.connect()
+                        connection
                                 .reactive()
                                 .xgroupCreate(XReadArgs.StreamOffset.from(stream, "0-0"), group, XGroupCreateArgs.Builder.mkstream()));
     }
@@ -102,7 +102,7 @@ public class TestLettuceRedisStreams implements RedisStreams {
     @Override
     public Uni<Long> xAck(String stream, String group, String id) {
         System.out.println("trying to xack id: " + id);
-        Mono<Long> xack = redisClient.connect().reactive().xack(stream, group, id);
+        Mono<Long> xack = connection.reactive().xack(stream, group, id);
         return UniReactorConverters.<Long> fromMono().from(xack);
     }
 
@@ -121,7 +121,6 @@ public class TestLettuceRedisStreams implements RedisStreams {
         } else {
             args = new XAddArgs();
         }
-        StatefulRedisConnection<String, String> connection = redisClient.connect();
         Mono<String> xadd = connection.reactive().xadd(stream, args.id(id), fields);
         return UniReactorConverters.<String> fromMono().from(xadd);
 
@@ -129,7 +128,6 @@ public class TestLettuceRedisStreams implements RedisStreams {
 
     @Override
     public Uni<List<StreamEntry>> xReadGroup(String stream, String group, String consumer, Integer count, Integer blockMs, Boolean noack) {
-        StatefulRedisConnection<String, String> connection = redisClient.connect();
         Mono<List<StreamEntry>> listMono = connection
                 .reactive()
                 .xreadgroup(
