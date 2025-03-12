@@ -46,6 +46,7 @@ import reactor.core.publisher.Mono;
  */
 public class TestLettuceRedisStreams implements RedisStreams {
     private final RedisClient redisClient;
+    private final StatefulRedisConnection<String, String> connection;
 
     public TestLettuceRedisStreams(int port) {
         redisClient = RedisClient.create(RedisURI.create("localhost", port));
@@ -55,17 +56,19 @@ public class TestLettuceRedisStreams implements RedisStreams {
                         .suspendReconnectOnProtocolFailure(true)
                         .timeoutOptions(TimeoutOptions.enabled(Duration.ofMinutes(1)))
                         .build());
+        connection = redisClient.connect();
     }
 
     @Override
     public void close() {
+        connection.close();
         redisClient.close();
     }
 
     @Override
     public Uni<Boolean> existGroup(String stream, String group) {
         return UniReactorConverters.<List<Object>> fromMono()
-                .from(redisClient.connect().reactive().xinfoGroups(stream).collectList())
+                .from(connection.reactive().xinfoGroups(stream).collectList())
                 .onItemOrFailure()
                 .transform((response, throwable) -> {
                     if (throwable != null) {

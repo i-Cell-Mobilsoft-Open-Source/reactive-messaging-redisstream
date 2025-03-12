@@ -113,20 +113,24 @@ public class RedisStreamsConnectorTest {
         System.setProperty(TestLettuceRedisStreamsProducer.TEST_REDIS_PORT_KEY, String.valueOf(REDIS_CONTAINER.getMappedPort(REDIS_PORT)));
 
         // NOTE: Teszteléshez Thread dump kinyerésére
-//        new Thread(() -> {
-//            try {
-//                TimeUnit.MINUTES.sleep(5);
-//            } catch (InterruptedException e) {
-//                throw new RuntimeException(e);
-//            }
-//            System.err.println("------------ Thead dump ------------");
-//            Thread.getAllStackTraces().forEach((thread, stackTrace) -> {
-//                System.err.println("Thread: " + thread.getName());
-//                for (StackTraceElement traceElement : stackTrace) {
-//                    System.err.println("\tat " + traceElement);
-//                }
-//            });
-//        }).start();
+        // new Thread(() -> {
+        // try {
+        // TimeUnit.MINUTES.sleep(5);
+        // } catch (InterruptedException e) {
+        // throw new RuntimeException(e);
+        // }
+        // threadDump();
+        // }).start();
+    }
+
+    private static void threadDump() {
+        System.err.println("------------ Thead dump ------------");
+        Thread.getAllStackTraces().forEach((thread, stackTrace) -> {
+            System.err.println("Thread: " + thread.getName());
+            for (StackTraceElement traceElement : stackTrace) {
+                System.err.println("\t\t" + traceElement);
+            }
+        });
     }
 
     /**
@@ -170,6 +174,12 @@ public class RedisStreamsConnectorTest {
             // And the message should be removed from the stream and the message should be acknowledged
             assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
         }
+        try {
+            TimeUnit.MINUTES.sleep(1);
+            threadDump();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
@@ -199,6 +209,11 @@ public class RedisStreamsConnectorTest {
             // And the message should be removed from the stream and the message should be acknowledged
             assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
         }
+        try {
+            TimeUnit.MINUTES.sleep(1);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -227,6 +242,11 @@ public class RedisStreamsConnectorTest {
             });
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer test", e);
+        }
+        try {
+            TimeUnit.MINUTES.sleep(1);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -259,6 +279,11 @@ public class RedisStreamsConnectorTest {
             });
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer with metadata test", e);
+        }
+        try {
+            TimeUnit.MINUTES.sleep(1);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 
