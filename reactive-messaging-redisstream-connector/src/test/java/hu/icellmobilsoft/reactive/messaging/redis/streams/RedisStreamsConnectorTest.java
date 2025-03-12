@@ -175,7 +175,7 @@ public class RedisStreamsConnectorTest {
             assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
         }
         try {
-            TimeUnit.MINUTES.sleep(1);
+            TimeUnit.SECONDS.sleep(10);
             threadDump();
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
@@ -210,7 +210,7 @@ public class RedisStreamsConnectorTest {
             assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
         }
         try {
-            TimeUnit.MINUTES.sleep(1);
+            TimeUnit.SECONDS.sleep(10);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -244,7 +244,7 @@ public class RedisStreamsConnectorTest {
             fail("Error occurred during producer test", e);
         }
         try {
-            TimeUnit.MINUTES.sleep(1);
+            TimeUnit.SECONDS.sleep(10);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -281,7 +281,7 @@ public class RedisStreamsConnectorTest {
             fail("Error occurred during producer with metadata test", e);
         }
         try {
-            TimeUnit.MINUTES.sleep(1);
+            TimeUnit.SECONDS.sleep(10);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
