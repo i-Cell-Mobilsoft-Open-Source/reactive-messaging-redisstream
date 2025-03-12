@@ -59,6 +59,7 @@ import io.lettuce.core.RedisFuture;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.StreamMessage;
 import io.lettuce.core.XReadArgs;
+import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.models.stream.PendingMessages;
 
 /**
@@ -168,7 +169,7 @@ public class RedisStreamsConnectorTest {
             String messageId = redisClient.connect().sync().xadd(streamKey, Map.of(DEFAULT_MESSAGE_KEY, payload));
             // then the consumer should receive the message eventually
             ConditionFactory await = Awaitility.await();
-            await.atMost(1, TimeUnit.SECONDS).until(() -> testConsumer.getMessages().size() > 0);
+            await.atMost(1, TimeUnit.SECONDS).until(() -> !testConsumer.getMessages().isEmpty());
             Assertions.assertEquals(payload, testConsumer.getMessages().get(0));
 
             // And the message should be removed from the stream and the message should be acknowledged
@@ -197,7 +198,7 @@ public class RedisStreamsConnectorTest {
                     .xadd(streamKey, Map.of(DEFAULT_MESSAGE_KEY, payload, additionalFieldKey, additionalFieldValue));
             // then the consumer should receive the message eventually and have a metadata class
             ConditionFactory await = Awaitility.await();
-            await.atMost(1, TimeUnit.SECONDS).until(() -> testConsumer.getMetadataMessages().size() > 0);
+            await.atMost(1, TimeUnit.SECONDS).until(() -> !testConsumer.getMetadataMessages().isEmpty());
 
             assertThat(testConsumer.getMetadataMessages()).anySatisfy(sm -> {
                 assertThat(sm).extracting(TestConsumer.MessageWithMetadata::getMessage).isEqualTo(payload);
@@ -220,6 +221,7 @@ public class RedisStreamsConnectorTest {
      * Test producer.
      */
     @Test
+    @SuppressWarnings("unchecked")
     void testProducer() {
         // given we have redis
         String streamKey = "out-stream";
@@ -267,6 +269,7 @@ public class RedisStreamsConnectorTest {
             String additionalField = "Test-additionalField";
             // when we produce a message
             testProducer.produceWithMetadata(message, additionalField);
+            Awaitility.await().until(() -> readResult.get(2, TimeUnit.SECONDS).size() == 1);
             // then the message should be in the stream
             List<StreamMessage<String, String>> streamMessages = readResult.get(2, TimeUnit.SECONDS);
             assertThat(streamMessages).hasSizeGreaterThanOrEqualTo(1);
@@ -291,16 +294,18 @@ public class RedisStreamsConnectorTest {
         return RedisClient.create(RedisURI.create("localhost", REDIS_CONTAINER.getMappedPort(REDIS_PORT)));
     }
 
+    @SuppressWarnings("unchecked")
     private static void assertThatMessageIsAckedOnRedis(String messageId, RedisClient redisClient, String streamKey) {
-        List<StreamMessage<String, String>> xreadgroup = redisClient.connect()
-                .sync()
+        StatefulRedisConnection<String, String> connection = redisClient.connect();
+        var commands = connection.sync();
+        var xreadgroup = commands
                 .xreadgroup(
                         Consumer.from(TEST__CONSUMER_GROUP, TEST_CONSUMER_ID),
                         XReadArgs.Builder.block(1000),
                         XReadArgs.StreamOffset.from(streamKey, ZERO_OFFSET));
         assertThat(xreadgroup).map(StreamMessage::getId).doesNotContain(messageId);
 
-        PendingMessages pending = redisClient.connect().sync().xpending(streamKey, TEST__CONSUMER_GROUP);
+        PendingMessages pending = commands.xpending(streamKey, TEST__CONSUMER_GROUP);
         assertThat(pending.getCount()).isZero();
     }
 
