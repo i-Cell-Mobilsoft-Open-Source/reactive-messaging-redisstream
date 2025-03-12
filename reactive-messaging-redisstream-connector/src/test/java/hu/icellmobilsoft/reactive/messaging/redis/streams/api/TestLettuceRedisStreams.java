@@ -61,8 +61,9 @@ public class TestLettuceRedisStreams implements RedisStreams {
 
     @Override
     public void close() {
-        connection.close();
+        System.out.println("Closing TestLettuceRedisStreams");
         redisClient.close();
+        System.out.println("Closed TestLettuceRedisStreams");
     }
 
     @Override
