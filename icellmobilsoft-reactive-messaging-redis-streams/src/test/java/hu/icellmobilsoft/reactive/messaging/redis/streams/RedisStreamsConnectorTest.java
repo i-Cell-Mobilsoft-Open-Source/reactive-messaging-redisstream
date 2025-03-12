@@ -134,11 +134,11 @@ public class RedisStreamsConnectorTest {
 
             // And the message should be removed from the stream and the message should be acknowledged
             assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
-        }
-        try {
-            Thread.sleep(2000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
@@ -168,11 +168,11 @@ public class RedisStreamsConnectorTest {
             });
             // And the message should be removed from the stream and the message should be acknowledged
             assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
-        }
-        try {
-            Thread.sleep(2000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
@@ -200,13 +200,13 @@ public class RedisStreamsConnectorTest {
                 assertThat(sm).extracting(StreamMessage::getBody).extracting(m -> m.get(DEFAULT_MESSAGE_KEY)).isEqualTo(message);
                 assertThat(sm).extracting(StreamMessage::getBody).extracting(m -> m.get("ttl")).isNotNull();
             });
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer test", e);
-        }
-        try {
-            Thread.sleep(2000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         }
     }
 
@@ -237,13 +237,13 @@ public class RedisStreamsConnectorTest {
                         .extracting(m -> m.get(TestProducer.ADDITIONAL_FIELD_KEY))
                         .isEqualTo(additionalField);
             });
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer with metadata test", e);
-        }
-        try {
-            Thread.sleep(2000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         }
     }
 
