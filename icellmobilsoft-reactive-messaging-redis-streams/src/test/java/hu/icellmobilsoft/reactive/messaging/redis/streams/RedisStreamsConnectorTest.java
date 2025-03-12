@@ -10,8 +10,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import jakarta.inject.Inject;
-
 import org.jboss.logging.JBossLogManagerProvider;
 import org.jboss.weld.junit5.EnableWeld;
 import org.jboss.weld.junit5.WeldInitiator;
@@ -38,6 +36,8 @@ import io.lettuce.core.StreamMessage;
 import io.lettuce.core.XReadArgs;
 import io.lettuce.core.models.stream.PendingMessages;
 
+import jakarta.inject.Inject;
+
 /**
  * Test class for {@link RedisStreamsConnector}
  */
@@ -63,16 +63,17 @@ public class RedisStreamsConnectorTest {
     public WeldInitiator weld = weldSetup();
 
     private WeldInitiator weldSetup() {
-        return WeldInitiator.from(
-                WeldInitiator.createWeld()
-                        .addBeanClass(TestConsumer.class)
-                        .addBeanClass(TestProducer.class)
-                        .addBeanClass(TestLettuceRedisStreams.class)
-                        .addBeanClass(TestLettuceRedisStreamsProducer.class)
-                        .addBeanClass(RedisStreamsConnector.class)
-                        .addBeanClass(JBossLogManagerProvider.class)
-                        // beans.xml scan
-                        .enableDiscovery())
+        return WeldInitiator
+                .from(
+                        WeldInitiator.createWeld()
+                                .addBeanClass(TestConsumer.class)
+                                .addBeanClass(TestProducer.class)
+                                .addBeanClass(TestLettuceRedisStreams.class)
+                                .addBeanClass(TestLettuceRedisStreamsProducer.class)
+                                .addBeanClass(RedisStreamsConnector.class)
+                                .addBeanClass(JBossLogManagerProvider.class)
+                                // beans.xml scan
+                                .enableDiscovery())
                 .build();
     }
 
@@ -81,13 +82,27 @@ public class RedisStreamsConnectorTest {
      */
     @BeforeAll
     public static void startRedisContainer() {
-        REDIS_CONTAINER = new GenericContainer<>("redis:7.0.1-alpine")
-                .withExposedPorts(REDIS_PORT)
+        REDIS_CONTAINER = new GenericContainer<>("redis:7.0.1-alpine").withExposedPorts(REDIS_PORT)
                 .waitingFor(new ShellStrategy().withCommand("redis-cli --raw incr ping"));
 
         REDIS_CONTAINER.start();
         // set mp config redis port
         System.setProperty(TestLettuceRedisStreamsProducer.TEST_REDIS_PORT_KEY, String.valueOf(REDIS_CONTAINER.getMappedPort(REDIS_PORT)));
+
+        new Thread(() -> {
+            try {
+                TimeUnit.MINUTES.sleep(5);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            System.err.println("------------ Thead dump ------------");
+            Thread.getAllStackTraces().forEach((thread, stackTrace) -> {
+                System.err.println("Thread: " + thread.getName());
+                for (StackTraceElement traceElement : stackTrace) {
+                    System.err.println("\tat " + traceElement);
+                }
+            });
+        }).start();
     }
 
     /**
@@ -105,6 +120,7 @@ public class RedisStreamsConnectorTest {
      */
     @Test
     void testConsumer() {
+        System.out.println("Running testConsumer test");
         String streamKey = "in-stream";
         // given we have redis
         try (RedisClient redisClient = connectToRedisContainer()) {
@@ -113,15 +129,11 @@ public class RedisStreamsConnectorTest {
             String messageId = redisClient.connect().sync().xadd(streamKey, Map.of(DEFAULT_MESSAGE_KEY, payload));
             // then the consumer should receive the message eventually
             ConditionFactory await = Awaitility.await();
-            await.atMost(1, TimeUnit.SECONDS)
-                    .until(() -> testConsumer.getMessages().size() > 0);
+            await.atMost(1, TimeUnit.SECONDS).until(() -> testConsumer.getMessages().size() > 0);
             Assertions.assertEquals(payload, testConsumer.getMessages().get(0));
 
             // And the message should be removed from the stream and the message should be acknowledged
-            assertThatMessageIsAckedOnRedis(
-                    messageId,
-                    redisClient,
-                    streamKey);
+            assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
         }
     }
 
@@ -140,8 +152,7 @@ public class RedisStreamsConnectorTest {
                     .xadd(streamKey, Map.of(DEFAULT_MESSAGE_KEY, payload, additionalFieldKey, additionalFieldValue));
             // then the consumer should receive the message eventually and have a metadata class
             ConditionFactory await = Awaitility.await();
-            await.atMost(1, TimeUnit.SECONDS)
-                    .until(() -> testConsumer.getMetadataMessages().size() > 0);
+            await.atMost(1, TimeUnit.SECONDS).until(() -> testConsumer.getMetadataMessages().size() > 0);
 
             assertThat(testConsumer.getMetadataMessages()).anySatisfy(sm -> {
                 assertThat(sm).extracting(TestConsumer.MessageWithMetadata::getMessage).isEqualTo(payload);
@@ -151,10 +162,7 @@ public class RedisStreamsConnectorTest {
                         .isEqualTo(additionalFieldValue);
             });
             // And the message should be removed from the stream and the message should be acknowledged
-            assertThatMessageIsAckedOnRedis(
-                    messageId,
-                    redisClient,
-                    streamKey);
+            assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
         }
     }
 
@@ -181,8 +189,7 @@ public class RedisStreamsConnectorTest {
                 assertThat(sm).extracting(StreamMessage::getStream).isEqualTo(streamKey);
                 assertThat(sm).extracting(StreamMessage::getBody).extracting(m -> m.get(DEFAULT_MESSAGE_KEY)).isEqualTo(message);
                 assertThat(sm).extracting(StreamMessage::getBody).extracting(m -> m.get("ttl")).isNotNull();
-            }
-            );
+            });
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer test", e);
         }
@@ -214,8 +221,7 @@ public class RedisStreamsConnectorTest {
                 assertThat(sm).extracting(StreamMessage::getBody)
                         .extracting(m -> m.get(TestProducer.ADDITIONAL_FIELD_KEY))
                         .isEqualTo(additionalField);
-            }
-            );
+            });
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer with metadata test", e);
         }
@@ -225,8 +231,7 @@ public class RedisStreamsConnectorTest {
         return RedisClient.create(RedisURI.create("localhost", REDIS_CONTAINER.getMappedPort(REDIS_PORT)));
     }
 
-    private static void assertThatMessageIsAckedOnRedis(String messageId, RedisClient redisClient,
-            String streamKey) {
+    private static void assertThatMessageIsAckedOnRedis(String messageId, RedisClient redisClient, String streamKey) {
         List<StreamMessage<String, String>> xreadgroup = redisClient.connect()
                 .sync()
                 .xreadgroup(
