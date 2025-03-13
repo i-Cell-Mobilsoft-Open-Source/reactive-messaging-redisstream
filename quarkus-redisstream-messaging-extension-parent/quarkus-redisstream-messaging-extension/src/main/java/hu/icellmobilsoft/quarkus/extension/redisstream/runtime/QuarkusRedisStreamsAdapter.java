@@ -124,6 +124,9 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
             xAddArgs.add(maxLen.toString());
         } else if (minId != null) {
             xAddArgs.add("MINID");
+            if (!Boolean.TRUE.equals(exact)) {
+                xAddArgs.add("~");
+            }
             xAddArgs.add(minId);
         }
 
