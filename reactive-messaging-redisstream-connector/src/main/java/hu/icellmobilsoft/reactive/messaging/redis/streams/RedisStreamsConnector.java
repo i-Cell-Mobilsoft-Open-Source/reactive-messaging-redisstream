@@ -19,36 +19,10 @@
  */
 package hu.icellmobilsoft.reactive.messaging.redis.streams;
 
-import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
-import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreamsProducer;
-import hu.icellmobilsoft.reactive.messaging.redis.streams.api.StreamEntry;
-import io.smallrye.mutiny.Multi;
-import io.smallrye.mutiny.Uni;
-import io.smallrye.reactive.messaging.annotations.ConnectorAttribute;
-import io.smallrye.reactive.messaging.connector.InboundConnector;
-import io.smallrye.reactive.messaging.connector.OutboundConnector;
-import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
-import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.Priority;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.context.BeforeDestroyed;
-import jakarta.enterprise.event.Observes;
-import jakarta.enterprise.event.Reception;
-import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.Config;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.eclipse.microprofile.reactive.messaging.Message;
-import org.eclipse.microprofile.reactive.messaging.spi.Connector;
-import org.eclipse.microprofile.reactive.messaging.spi.ConnectorFactory;
-import org.jboss.logging.Logger;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -56,9 +30,39 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
+
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Priority;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.BeforeDestroyed;
+import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.event.Reception;
+import jakarta.inject.Inject;
+
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.eclipse.microprofile.reactive.messaging.Message;
+import org.eclipse.microprofile.reactive.messaging.spi.Connector;
+import org.eclipse.microprofile.reactive.messaging.spi.ConnectorFactory;
+import org.jboss.logging.Logger;
+
+import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreamsProducer;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.api.StreamEntry;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.concurrent.ReducableSemaphore;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.IncomingRedisStreamMetadata;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.RedisStreamMetadata;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
+import io.smallrye.reactive.messaging.annotations.ConnectorAttribute;
+import io.smallrye.reactive.messaging.connector.InboundConnector;
+import io.smallrye.reactive.messaging.connector.OutboundConnector;
+import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
+import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
 
 /**
  * Microprofile Reactive Streams connector for Redis Streams integration.
@@ -109,7 +113,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     private volatile boolean prudentRun = true;
     private final List<Flow.Subscription> subscriptions = new CopyOnWriteArrayList<>();
     private final List<RedisStreams> redisStreams = new CopyOnWriteArrayList<>();
-    private final Set<String> underProcessing = Collections.synchronizedSet(new HashSet<>());
+    private final Set<String> underProcessing = ConcurrentHashMap.newKeySet();
     private final ReducableSemaphore shutdownPermit = new ReducableSemaphore(1);
     private final Integer gracefulShutdownTimeout;
 
