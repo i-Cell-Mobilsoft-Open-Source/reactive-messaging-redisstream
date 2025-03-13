@@ -81,7 +81,7 @@ import java.util.concurrent.TimeUnit;
 @ConnectorAttribute(name = "xread-block-ms", description = "The milliseconds to wait in an XREADGROUP call", type = "int", defaultValue = "5000",
         direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xread-noack", description = "Include the NOACK parameter in the XREADGROUP call", type = "boolean",
-        defaultValue = "false",
+        defaultValue = "true",
         direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xadd-maxlen", description = "The maximum number of entries to keep in the stream", type = "int",
         direction = ConnectorAttribute.Direction.OUTGOING)
