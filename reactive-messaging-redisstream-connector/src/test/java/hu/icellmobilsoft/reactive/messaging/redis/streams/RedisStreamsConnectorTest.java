@@ -29,22 +29,16 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import jakarta.inject.Inject;
-
 import org.jboss.logging.JBossLogManagerProvider;
 import org.jboss.weld.junit5.EnableWeld;
-import org.jboss.weld.junit5.ExplicitParamInjection;
 import org.jboss.weld.junit5.WeldInitiator;
 import org.jboss.weld.junit5.WeldJunit5Extension;
 import org.jboss.weld.junit5.WeldSetup;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.ShellStrategy;
@@ -61,6 +55,8 @@ import io.lettuce.core.StreamMessage;
 import io.lettuce.core.XReadArgs;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.models.stream.PendingMessages;
+
+import jakarta.inject.Inject;
 
 /**
  * Test class for {@link RedisStreamsConnector}
@@ -112,26 +108,6 @@ public class RedisStreamsConnectorTest {
         REDIS_CONTAINER.start();
         // set mp config redis port
         System.setProperty(TestLettuceRedisStreamsProducer.TEST_REDIS_PORT_KEY, String.valueOf(REDIS_CONTAINER.getMappedPort(REDIS_PORT)));
-
-        // NOTE: Teszteléshez Thread dump kinyerésére
-        // new Thread(() -> {
-        // try {
-        // TimeUnit.MINUTES.sleep(5);
-        // } catch (InterruptedException e) {
-        // throw new RuntimeException(e);
-        // }
-        // threadDump();
-        // }).start();
-    }
-
-    private static void threadDump() {
-        System.err.println("------------ Thead dump ------------");
-        Thread.getAllStackTraces().forEach((thread, stackTrace) -> {
-            System.err.println("Thread: " + thread.getName());
-            for (StackTraceElement traceElement : stackTrace) {
-                System.err.println("\t\t" + traceElement);
-            }
-        });
     }
 
     /**
@@ -142,18 +118,6 @@ public class RedisStreamsConnectorTest {
         if (REDIS_CONTAINER != null) {
             REDIS_CONTAINER.stop();
         }
-    }
-
-    @BeforeEach
-    @ExplicitParamInjection
-    void setUp(TestInfo testInfo) {
-        System.out.println("Test starting: " + testInfo.getDisplayName());
-    }
-
-    @AfterEach
-    @ExplicitParamInjection
-    void tearDown(TestInfo testInfo) {
-        System.out.println("Test finished: " + testInfo.getDisplayName());
     }
 
     /**
@@ -174,12 +138,6 @@ public class RedisStreamsConnectorTest {
 
             // And the message should be removed from the stream and the message should be acknowledged
             assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
-        }
-        try {
-            TimeUnit.SECONDS.sleep(10);
-            threadDump();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         }
     }
 
@@ -210,11 +168,6 @@ public class RedisStreamsConnectorTest {
             // And the message should be removed from the stream and the message should be acknowledged
             assertThatMessageIsAckedOnRedis(messageId, redisClient, streamKey);
         }
-        try {
-            TimeUnit.SECONDS.sleep(10);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     /**
@@ -244,11 +197,6 @@ public class RedisStreamsConnectorTest {
             });
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer test", e);
-        }
-        try {
-            TimeUnit.SECONDS.sleep(10);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         }
     }
 
@@ -283,11 +231,6 @@ public class RedisStreamsConnectorTest {
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer with metadata test", e);
         }
-        try {
-            TimeUnit.SECONDS.sleep(10);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     private RedisClient connectToRedisContainer() {
@@ -298,11 +241,10 @@ public class RedisStreamsConnectorTest {
     private static void assertThatMessageIsAckedOnRedis(String messageId, RedisClient redisClient, String streamKey) {
         StatefulRedisConnection<String, String> connection = redisClient.connect();
         var commands = connection.sync();
-        var xreadgroup = commands
-                .xreadgroup(
-                        Consumer.from(TEST__CONSUMER_GROUP, TEST_CONSUMER_ID),
-                        XReadArgs.Builder.block(1000),
-                        XReadArgs.StreamOffset.from(streamKey, ZERO_OFFSET));
+        var xreadgroup = commands.xreadgroup(
+                Consumer.from(TEST__CONSUMER_GROUP, TEST_CONSUMER_ID),
+                XReadArgs.Builder.block(1000),
+                XReadArgs.StreamOffset.from(streamKey, ZERO_OFFSET));
         assertThat(xreadgroup).map(StreamMessage::getId).doesNotContain(messageId);
 
         PendingMessages pending = commands.xpending(streamKey, TEST__CONSUMER_GROUP);

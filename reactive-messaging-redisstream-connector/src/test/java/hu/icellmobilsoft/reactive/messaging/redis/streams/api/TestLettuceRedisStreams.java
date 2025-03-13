@@ -61,9 +61,7 @@ public class TestLettuceRedisStreams implements RedisStreams {
 
     @Override
     public void close() {
-        System.out.println("Closing TestLettuceRedisStreams");
         redisClient.close();
-        System.out.println("Closed TestLettuceRedisStreams");
     }
 
     @Override
@@ -101,7 +99,6 @@ public class TestLettuceRedisStreams implements RedisStreams {
 
     @Override
     public Uni<Long> xAck(String stream, String group, String id) {
-        System.out.println("trying to xack id: " + id);
         Mono<Long> xack = connection.reactive().xack(stream, group, id);
         return UniReactorConverters.<Long> fromMono().from(xack);
     }
