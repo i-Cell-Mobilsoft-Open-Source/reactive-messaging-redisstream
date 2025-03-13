@@ -40,6 +40,13 @@ import io.vertx.mutiny.redis.client.RedisAPI;
 public class RedisStreamsRecorder {
 
     /**
+     * Default constructor
+     */
+    public RedisStreamsRecorder() {
+        // NOTE: For jdk 21.
+    }
+
+    /**
      * Creates a function that produces a RedisStreamsProducer.
      *
      * @return a function that takes a SyntheticCreationalContext and returns a RedisStreamsProducer

@@ -41,6 +41,12 @@ public class RedisStreamsConnectorLifecycleManager {
     RedisStreamsConnector redisStreamsConnector;
 
     /**
+     * Default constructor
+     */
+    public RedisStreamsConnectorLifecycleManager() {
+        // NOTE: For jdk 21.
+    }
+    /**
      * Terminate the connector upon quarkus shutdown event (before ApplicationScope is destroyed).
      */
     @Shutdown

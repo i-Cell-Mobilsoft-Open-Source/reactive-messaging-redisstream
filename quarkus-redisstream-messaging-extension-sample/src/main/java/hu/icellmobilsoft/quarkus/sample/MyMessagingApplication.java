@@ -52,6 +52,12 @@ public class MyMessagingApplication {
     private int errorsFound = 0;
 
     /**
+     * Default constructor
+     */
+    public MyMessagingApplication() {
+        // NOTE: For jdk 21.
+    }
+    /**
      * Sends message to the "words-out" channel, can be used from a JAX-RS resource or any bean of your application. Messages are sent to the broker.
      * @param ev startup event
      **/

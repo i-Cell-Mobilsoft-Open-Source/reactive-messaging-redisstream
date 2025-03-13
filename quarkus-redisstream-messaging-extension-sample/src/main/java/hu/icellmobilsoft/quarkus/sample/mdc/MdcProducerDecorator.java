@@ -35,6 +35,13 @@ import java.util.Optional;
 @ApplicationScoped
 public class MdcProducerDecorator implements SubscriberDecorator {
 
+    /**
+     * Default constructor
+     */
+    public MdcProducerDecorator() {
+        // NOTE: For jdk 21.
+    }
+
     @Override
     public Multi<? extends Message<?>> decorate(Multi<? extends Message<?>> publisher, List<String> channelName, boolean isConnector) {
         return publisher.map(message -> {

@@ -38,6 +38,7 @@ public class RedisStreamMetadata {
     public RedisStreamMetadata() {
         // NOTE: For jdk 21.
     }
+
     /**
      * Gets the additional fields beside message payload.
      *
