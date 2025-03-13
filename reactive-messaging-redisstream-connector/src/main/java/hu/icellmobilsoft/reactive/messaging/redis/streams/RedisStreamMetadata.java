@@ -33,6 +33,12 @@ public class RedisStreamMetadata {
     private final Map<String, String> additionalFields = new HashMap<>();
 
     /**
+     * Default constructor
+     */
+    public RedisStreamMetadata() {
+        // NOTE: For jdk 21.
+    }
+    /**
      * Gets the additional fields beside message payload.
      *
      * @return a map containing the additional fields
