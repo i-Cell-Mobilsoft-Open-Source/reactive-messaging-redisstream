@@ -85,9 +85,6 @@ public class TestLettuceRedisStreams implements RedisStreams {
                 });
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Uni<String> xGroupCreate(String stream, String group) {
         return UniReactorConverters.<String> fromMono()

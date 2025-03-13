@@ -56,9 +56,6 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
         this.redisAPI = redisAPI;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Uni<Boolean> existGroup(String stream, String group) {
         return redisAPI.xinfo(List.of("GROUPS", stream))
@@ -84,33 +81,21 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
                 });
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Uni<String> xGroupCreate(String stream, String group) {
         return redisAPI.xgroup(List.of("CREATE", stream, group, "0", "MKSTREAM")).map(Response::toString);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Uni<Long> xAck(String stream, String group, String id) {
         return redisAPI.xack(List.of(stream, group, id)).map(Response::toLong);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Uni<String> xAdd(String stream, String id, Map<String, String> fields) {
         return xAdd(stream, id, null, null, null, fields);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Uni<String> xAdd(String stream, String id, Integer maxLen, Boolean exact, String minId, Map<String, String> fields) {
         List<String> xAddArgs = new ArrayList<>();
@@ -136,9 +121,6 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
         return redisAPI.xadd(xAddArgs).map(Response::toString);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Uni<List<StreamEntry>> xReadGroup(String stream, String group, String consumer, Integer count, Integer blockMs, Boolean noack) {
         List<String> xReadArgs = new ArrayList<>();
