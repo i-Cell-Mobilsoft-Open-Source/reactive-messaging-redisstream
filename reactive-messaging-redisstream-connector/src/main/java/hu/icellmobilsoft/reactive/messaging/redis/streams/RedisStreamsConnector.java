@@ -19,30 +19,6 @@
  */
 package hu.icellmobilsoft.reactive.messaging.redis.streams;
 
-import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
-import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreamsProducer;
-import hu.icellmobilsoft.reactive.messaging.redis.streams.api.StreamEntry;
-import io.smallrye.mutiny.Multi;
-import io.smallrye.mutiny.Uni;
-import io.smallrye.reactive.messaging.annotations.ConnectorAttribute;
-import io.smallrye.reactive.messaging.connector.InboundConnector;
-import io.smallrye.reactive.messaging.connector.OutboundConnector;
-import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
-import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.Priority;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.context.BeforeDestroyed;
-import jakarta.enterprise.event.Observes;
-import jakarta.enterprise.event.Reception;
-import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.Config;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.eclipse.microprofile.reactive.messaging.Message;
-import org.eclipse.microprofile.reactive.messaging.spi.Connector;
-import org.eclipse.microprofile.reactive.messaging.spi.ConnectorFactory;
-import org.jboss.logging.Logger;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -59,6 +35,32 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
+
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.eclipse.microprofile.reactive.messaging.Message;
+import org.eclipse.microprofile.reactive.messaging.spi.Connector;
+import org.eclipse.microprofile.reactive.messaging.spi.ConnectorFactory;
+import org.jboss.logging.Logger;
+
+import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreamsProducer;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.api.StreamEntry;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
+import io.smallrye.reactive.messaging.annotations.ConnectorAttribute;
+import io.smallrye.reactive.messaging.connector.InboundConnector;
+import io.smallrye.reactive.messaging.connector.OutboundConnector;
+import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
+import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
+
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Priority;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.BeforeDestroyed;
+import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.event.Reception;
+import jakarta.inject.Inject;
 
 /**
  * Microprofile Reactive Streams connector for Redis Streams integration.
@@ -406,14 +408,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             if (!prudent) {
                 return Uni.createFrom().item(true);
             }
-            return redisAPI.existGroup(streamKey, group);
+            return redisAPI.xGroupCreate(streamKey, group);
         })
-                .flatMap(exists -> {
-                    if (!exists) {
-                        return redisAPI.xGroupCreate(streamKey, group);
-                    }
-                    return Uni.createFrom().nullItem();
-                })
+                .onFailure(this::isGroupAlreadyExists).recoverWithNull()
                 // we created the group so prudent run is not needed anymore
                 .invoke(() -> prudentRun = false)
                 .replaceWith(
@@ -505,6 +502,10 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                     minId,
                     streamEntryFields);
         }));
+    }
+
+    private boolean isGroupAlreadyExists(Throwable throwable) {
+        return Optional.ofNullable(throwable.getMessage()).filter(m -> m.startsWith("BUSYGROUP")).isPresent();
     }
 
 }
