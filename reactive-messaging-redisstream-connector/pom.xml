@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>hu.icellmobilsoft.reactive.redisstream.messaging</groupId>
+        <artifactId>reactive-redisstream-messaging</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>reactive-messaging-redisstream-connector</artifactId>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>hu.icellmobilsoft.reactive.redisstream.messaging</groupId>
+                <artifactId>bom-all</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+
+        <!-- smallrye dependencies -->
+        <dependency>
+            <groupId>io.smallrye.reactive</groupId>
+            <artifactId>smallrye-reactive-messaging-provider</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.smallrye.reactive</groupId>
+            <artifactId>smallrye-connector-attribute-processor</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Microprofile dependencies -->
+
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+        </dependency>
+
+        <!-- Test dependencies -->
+        <dependency>
+            <groupId>org.eclipse.microprofile.reactive-streams-operators</groupId>
+            <artifactId>microprofile-reactive-streams-operators-api</artifactId>
+
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+        </dependency>
+        <dependency>
+            <!--  reactive redis client  -->
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.reactive</groupId>
+            <artifactId>mutiny-reactor</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.config</groupId>
+            <artifactId>smallrye-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.weld</groupId>
+            <artifactId>weld-junit5</artifactId>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>io.smallrye</groupId>
+                <artifactId>jandex-maven-plugin</artifactId>
+                <version>${jandex-maven-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>make-index</id>
+                        <goals>
+                            <goal>jandex</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <generatedSourcesDirectory>${project.build.directory}/generated-sources/</generatedSourcesDirectory>
+                    <annotationProcessors>
+                        <annotationProcessor>
+                            io.smallrye.reactive.messaging.connector.ConnectorAttributeProcessor
+                        </annotationProcessor>
+                    </annotationProcessors>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
