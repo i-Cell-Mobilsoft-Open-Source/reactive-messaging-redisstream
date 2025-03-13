@@ -136,6 +136,6 @@ public class TestLettuceRedisStreams implements RedisStreams {
                         XReadArgs.StreamOffset.lastConsumed(stream))
                 .map(sm -> new StreamEntry(stream, sm.getId(), sm.getBody()))
                 .collectList();
-        return UniReactorConverters.<List<StreamEntry>> fromMono().from(listMono).onTermination().invoke(connection::close);
+        return UniReactorConverters.<List<StreamEntry>> fromMono().from(listMono);
     }
 }
