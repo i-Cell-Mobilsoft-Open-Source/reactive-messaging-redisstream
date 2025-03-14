@@ -1,4 +1,101 @@
-= Quarkus Redis Stream
+:sectnums:
 
-The Redis Streams Connector integrates with Redis Streams to provide a reactive messaging solution using MicroProfile Reactive Messaging with.
-This connector supports both consuming (inbound) and producing (outgoing) messages to/from Redis Streams.
+= Reactive Messaging RedisStream
+
+image:https://github.com/i-Cell-Mobilsoft-Open-Source/reactive-messaging-redisstream/actions/workflows/compile_maven.yml/badge.svg?style=plastic[link="https://github.com/i-Cell-Mobilsoft-Open-Source/reactive-messaging-redisstream/actions/workflows/compile_maven.yml"]
+image:https://img.shields.io/maven-central/v/hu.icellmobilsoft.reactive.messaging.redisstream/reactive-messaging-redisstream?logo=apache-maven&style=for-the-badge)[Maven central version of Project]
+image:https://img.shields.io/github/license/i-Cell-Mobilsoft-Open-Source/reactive-messaging-redisstream?style=plastic&logo=apache[License of Project]
+image:https://img.shields.io/badge/Use_JakartaEE-project-brightgreen.svg?style=plastic&logo=jakartaee[Use JakartaEE project]
+
+== Introduction
+
+This project provides a *Redis Stream*-based *SmallRye Reactive Messaging* connector that enables the use of the *MicroProfile Reactive Messaging API* over Redis Stream.
+The implementation allows seamless integration of asynchronous data streams into WildFly and Quarkus-based applications.
+
+For more details on *MicroProfile Reactive Messaging*, check:
+
+link:https://download.eclipse.org/microprofile/microprofile-reactive-messaging-1.0/microprofile-reactive-messaging-spec.html[MicroProfile Reactive Messaging Specification]
+
+For information on *SmallRye Reactive Messaging*, visit:
+
+link:https://download.eclipse.org/microprofile/microprofile-reactive-messaging-1.0/microprofile-reactive-messaging-spec.html[SmallRye Reactive Messaging]
+
+== Project Structure
+
+This repository consists of the following main components:
+
+=== RedisStream Connector
+
+A *Reactive Messaging connector* compatible with WildFly that handles Redis Stream-based data flows.
+Similar to existing connectors (Kafka, AMQP, etc.), this can be configured without needing to manage the underlying implementation manually.
+
+=== Quarkus Extension
+
+For easy integration with Quarkus, the connector is also available as a Quarkus extension.
+This extension helps with configuration and optimizes the runtime environment.
+The extension consists of two main parts:
+
+- *Runtime*: Contains components required during application execution.
+- *Deployment*: Handles configuration aspects needed at build time.
+
+=== Quarkus Sample
+
+A sample application demonstrating how to use the extension with Quarkus.
+This project shows how to configure and use the Redis Stream connector in practice.
+
+== Usage
+
+The RedisStream connector can be configured using MicroProfile Config properties.
+The following example demonstrates a simple producer-consumer setup:
+
+.microprofile-config.properties
+[source,properties]
+----
+mp.messaging.incoming.my-stream.connector=redis-stream
+mp.messaging.incoming.my-stream.channel=my-channel
+
+mp.messaging.outgoing.my-stream.connector=redis-stream
+mp.messaging.outgoing.my-stream.channel=my-channel
+----
+
+You can test the solution by running the sample project.
+
+== Requirements
+
+- Java 17+
+- Maven 3.8.1+
+- Redis 6+
+
+Can use it in:
+
+- Wildfly
+- Quarkus (with the extension)
+
+== Installation & Execution
+
+=== Clone the Repository
+
+[source,sh]
+----
+git clone https://github.com/YOUR_GITHUB_USERNAME/reactive-messaging-redisstream.git
+cd reactive-messaging-redisstream
+----
+
+=== Build with Maven
+
+[source,sh]
+----
+mvn clean install
+----
+
+=== Run the Quarkus Sample
+
+[source,sh]
+----
+cd sample-quarkus-app
+mvn quarkus:dev
+----
+
+== Contribution
+
+If you’d like to contribute, feel free to open an issue or submit a pull request!

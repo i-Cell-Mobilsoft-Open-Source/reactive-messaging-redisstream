@@ -1,0 +1,19 @@
+= 1.0.0 -> 1.1.0
+
+== What's new
+
+* 1st new in <<Modules,reactive-messaging-redisstream-connector modul>>
+
+== Changes
+
+=== 1st change
+
+===  2nd change
+
+===  3rd change
+
+XYZ method is deleted.
+
+==== Migration
+
+Use ABC method instead of XYZ.
