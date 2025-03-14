@@ -410,14 +410,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             if (!prudent) {
                 return Uni.createFrom().item(true);
             }
-            return redisAPI.existGroup(streamKey, group);
+            return redisAPI.xGroupCreate(streamKey, group);
         })
-                .flatMap(exists -> {
-                    if (!exists) {
-                        return redisAPI.xGroupCreate(streamKey, group);
-                    }
-                    return Uni.createFrom().nullItem();
-                })
+                .onFailure(this::isGroupAlreadyExists).recoverWithNull()
                 // we created the group so prudent run is not needed anymore
                 .invoke(() -> prudentRun = false)
                 .replaceWith(
@@ -509,6 +504,10 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                     minId,
                     streamEntryFields);
         }));
+    }
+
+    private boolean isGroupAlreadyExists(Throwable throwable) {
+        return Optional.ofNullable(throwable.getMessage()).filter(m -> m.startsWith("BUSYGROUP")).isPresent();
     }
 
 }
