@@ -9,42 +9,41 @@
         <version>1.4.0</version>
     </parent>
 
-    <groupId>hu.icellmobilsoft.reactive.redisstream.messaging</groupId>
-    <artifactId>reactive-redisstream-messaging</artifactId>
+    <groupId>hu.icellmobilsoft.reactive.messaging.redisstream</groupId>
+    <artifactId>reactive-messaging-redisstream</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <description>Reactive messaging with Redis stream</description>
-    <url>https://github.com/i-Cell-Mobilsoft-Open-Source/reactive-redisstream-messaging</url>
+    <url>https://github.com/i-Cell-Mobilsoft-Open-Source/reactive-messaging-redisstream</url>
     <inceptionYear>2025</inceptionYear>
 
     <properties>
         <project.scm.id>icell-github-server</project.scm.id>
-        <sonar.junit.reportPaths>${surefire.reportsDir}, ${failsafe.reportsDir}</sonar.junit.reportPaths>
+        <sonar.junit.reportPaths>${surefire.reportsDirectory}, ${failsafe.reportsDirectory}</sonar.junit.reportPaths>
         <sonar.jacoco.reportPaths>${jacoco.ut.execution.data.file}, ${jacoco.it.execution.data.file}</sonar.jacoco.reportPaths>
 
         <quarkus.platform.version>3.17.5</quarkus.platform.version>
         <jandex-maven-plugin.version>3.2.3</jandex-maven-plugin.version>
     </properties>
 
-    <!-- TODO: átnevezni majd -->
     <scm>
-        <connection>scm:git:git@github.com:i-Cell-Mobilsoft-Open-Source/quarkus-redisstream-messaging.git</connection>
-        <developerConnection>scm:git:git@github.com:i-Cell-Mobilsoft-Open-Source/quarkus-redisstream-messaging.git</developerConnection>
-        <url>https://github.com/i-Cell-Mobilsoft-Open-Source/quarkus-redisstream-messaging</url>
+        <connection>scm:git:git@github.com:i-Cell-Mobilsoft-Open-Source/reactive-messaging-redisstream.git</connection>
+        <developerConnection>scm:git:git@github.com:i-Cell-Mobilsoft-Open-Source/reactive-messaging-redisstream.git</developerConnection>
+        <url>https://github.com/i-Cell-Mobilsoft-Open-Source/reactive-messaging-redisstream</url>
         <tag>HEAD</tag>
     </scm>
 
     <issueManagement>
         <system>github issues</system>
-        <url>https://github.com/i-Cell-Mobilsoft-Open-Source/quarkus-redisstream-messaging/issues</url>
+        <url>https://github.com/i-Cell-Mobilsoft-Open-Source/reactive-messaging-redisstream/issues</url>
     </issueManagement>
 
     <modules>
         <module>bom</module>
         <module>reactive-messaging-redisstream-connector</module>
-        <module>quarkus-redisstream-messaging-extension-sample</module>
-        <module>quarkus-redisstream-messaging-extension-parent</module>
+        <module>quarkus-reactive-messaging-redisstream-extension-sample</module>
+        <module>quarkus-reactive-messaging-redisstream-extension-parent</module>
     </modules>
 
 
@@ -64,53 +63,58 @@
                         </archive>
                     </configuration>
                 </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-release-plugin</artifactId>
-                    <version>3.0.1</version>
-                    <configuration>
-                        <releaseProfiles>release</releaseProfiles>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.1.2</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-failsafe-plugin</artifactId>
-                    <version>3.1.2</version>
-                    <executions>
-                        <execution>
-                            <phase>integration-test</phase>
-                            <goals>
-                                <goal>integration-test</goal>
-                                <goal>verify</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                    <configuration>
-                        <includes>
-                            <include>**/Test*.java</include>
-                            <include>**/*Test.java</include>
-                            <include>**/*Tests.java</include>
-                            <include>**/*TestCase.java</include>
-                        </includes>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.asciidoctor</groupId>
-                    <artifactId>asciidoctor-maven-plugin</artifactId>
-                    <version>2.2.4</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.asciidoctor</groupId>
-                            <artifactId>asciidoctorj-diagram</artifactId>
-                            <version>2.2.13</version>
-                        </dependency>
-                    </dependencies>
-                </plugin>
+                <!-- Parentből öröklődnek TODO -->
+<!--                <plugin>-->
+<!--                    <groupId>org.apache.maven.plugins</groupId>-->
+<!--                    <artifactId>maven-release-plugin</artifactId>-->
+<!--                    <version>3.0.1</version>-->
+<!--                    <configuration>-->
+<!--                        <releaseProfiles>release</releaseProfiles>-->
+<!--                    </configuration>-->
+<!--                </plugin>-->
+<!--                <plugin>-->
+<!--                    <groupId>org.apache.maven.plugins</groupId>-->
+<!--                    <artifactId>maven-surefire-plugin</artifactId>-->
+<!--                    <version>3.1.2</version>-->
+<!--                    <configuration>-->
+<!--                        <excludedGroups>weld,it,integration</excludedGroups>-->
+<!--                    </configuration>-->
+<!--                </plugin>-->
+<!--                <plugin>-->
+<!--                    <groupId>org.apache.maven.plugins</groupId>-->
+<!--                    <artifactId>maven-failsafe-plugin</artifactId>-->
+<!--                    <version>3.1.2</version>-->
+<!--                    <executions>-->
+<!--                        <execution>-->
+<!--                            <phase>integration-test</phase>-->
+<!--                            <goals>-->
+<!--                                <goal>integration-test</goal>-->
+<!--                                <goal>verify</goal>-->
+<!--                            </goals>-->
+<!--                        </execution>-->
+<!--                    </executions>-->
+<!--                    <configuration>-->
+<!--                        <includes>-->
+<!--                            <include>**/Test*.java</include>-->
+<!--                            <include>**/*Test.java</include>-->
+<!--                            <include>**/*Tests.java</include>-->
+<!--                            <include>**/*TestCase.java</include>-->
+<!--                        </includes>-->
+<!--                        <groups>weld,it,integration</groups>-->
+<!--                    </configuration>-->
+<!--                </plugin>-->
+<!--                <plugin>-->
+<!--                    <groupId>org.asciidoctor</groupId>-->
+<!--                    <artifactId>asciidoctor-maven-plugin</artifactId>-->
+<!--                    <version>2.2.4</version>-->
+<!--                    <dependencies>-->
+<!--                        <dependency>-->
+<!--                            <groupId>org.asciidoctor</groupId>-->
+<!--                            <artifactId>asciidoctorj-diagram</artifactId>-->
+<!--                            <version>2.2.13</version>-->
+<!--                        </dependency>-->
+<!--                    </dependencies>-->
+<!--                </plugin>-->
                 <plugin>
                     <groupId>io.smallrye</groupId>
                     <artifactId>jandex-maven-plugin</artifactId>
@@ -160,7 +164,7 @@
                         <include>**/*.java</include>
                     </includes>
                     <ignoreNoFileToScan>true</ignoreNoFileToScan>
-                    <projectName>reactive-redisstream-messaging</projectName>
+                    <projectName>reactive-messaging-redisstream</projectName>
                 </configuration>
             </plugin>
             <plugin>

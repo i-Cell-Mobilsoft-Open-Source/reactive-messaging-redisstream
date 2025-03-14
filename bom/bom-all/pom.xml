@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>hu.icellmobilsoft.reactive.redisstream.messaging</groupId>
+        <groupId>hu.icellmobilsoft.reactive.messaging.redisstream</groupId>
         <artifactId>bom</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
@@ -16,14 +16,14 @@
         <dependencies>
 
             <dependency>
-                <groupId>hu.icellmobilsoft.reactive.redisstream.messaging</groupId>
+                <groupId>hu.icellmobilsoft.reactive.messaging.redisstream</groupId>
                 <artifactId>bom-project</artifactId>
                 <version>${project.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
             <dependency>
-                <groupId>hu.icellmobilsoft.reactive.redisstream.messaging</groupId>
+                <groupId>hu.icellmobilsoft.reactive.messaging.redisstream</groupId>
                 <artifactId>bom-test</artifactId>
                 <version>${project.version}</version>
                 <type>pom</type>

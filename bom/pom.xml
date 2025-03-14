@@ -4,8 +4,8 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>hu.icellmobilsoft.reactive.redisstream.messaging</groupId>
-        <artifactId>reactive-redisstream-messaging</artifactId>
+        <groupId>hu.icellmobilsoft.reactive.messaging.redisstream</groupId>
+        <artifactId>reactive-messaging-redisstream</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 

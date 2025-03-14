@@ -1,6 +1,6 @@
 /*-
  * #%L
- * reactive-redisstream-messaging
+ * reactive-messaging-redisstream
  * %%
  * Copyright (C) 2025 i-Cell Mobilsoft Zrt.
  * %%
@@ -67,7 +67,7 @@ import java.util.concurrent.TimeUnit;
  * @since 1.0.0
  */
 @ApplicationScoped
-@Connector(RedisStreamsConnector.ICELLMOBILSOFT_REDIS_STREAMS_CONNECTOR)
+@Connector(RedisStreamsConnector.REACTIVE_MESSAGING_REDIS_STREAMS_CONNECTOR)
 @ConnectorAttribute(name = RedisStreamsConnector.REDIS_STREAM_CONNECTION_KEY_CONFIG, description = "The redis connection key to use",
         defaultValue = RedisStreamsProducer.DEFAULT_CONNECTION_KEY, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
 @ConnectorAttribute(name = "stream-key", description = "The Redis key holding the stream items", mandatory = true, type = "string",
@@ -94,7 +94,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     /**
      * The name of the Redis Streams connector.
      */
-    public static final String ICELLMOBILSOFT_REDIS_STREAMS_CONNECTOR = "icellmobilsoft-redis-streams";
+    public static final String REACTIVE_MESSAGING_REDIS_STREAMS_CONNECTOR = "reactive-messaging-redis-streams";
 
     /**
      * The microprofile config key used to specify the Redis connection key.
@@ -122,7 +122,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      */
     @Inject
     public RedisStreamsConnector(RedisStreamsProducer redisStreamsProducer,
-            @ConfigProperty(name = ConnectorFactory.CONNECTOR_PREFIX + ICELLMOBILSOFT_REDIS_STREAMS_CONNECTOR + ".graceful-timeout-ms",
+            @ConfigProperty(name = ConnectorFactory.CONNECTOR_PREFIX + REACTIVE_MESSAGING_REDIS_STREAMS_CONNECTOR + ".graceful-timeout-ms",
                     defaultValue = "60000") Integer gracefulShutdownTimeout) {
         this.redisStreamsProducer = redisStreamsProducer;
         this.gracefulShutdownTimeout = gracefulShutdownTimeout;
