@@ -28,7 +28,7 @@ mp:
   messaging:
     outgoing:
       out-channel: #<1>
-        connector: icellmobilsoft-redis-streams #<2>
+        connector: reactive-messaging-redis-streams #<2>
         stream-key: mystream #<3>
         connection-key: my-redis-connection #<4>
         payload-field: message #optional defaults to 'message'

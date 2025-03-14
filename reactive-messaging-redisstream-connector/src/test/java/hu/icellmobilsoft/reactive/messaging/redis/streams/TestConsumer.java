@@ -1,6 +1,6 @@
 /*-
  * #%L
- * reactive-redisstream-messaging
+ * reactive-messaging-redisstream
  * %%
  * Copyright (C) 2025 i-Cell Mobilsoft Zrt.
  * %%

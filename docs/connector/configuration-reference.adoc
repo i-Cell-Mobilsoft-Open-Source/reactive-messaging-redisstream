@@ -1,6 +1,6 @@
 = Configuration
 
-The connector is identified by `icellmobilsoft-redis-streams`.
+The connector is identified by `reactive-messaging-redis-streams`.
 Below are the configuration attributes available for both inbound and outbound channels.
 
 [cols="2,5,1,1,1"]

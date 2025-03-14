@@ -2,7 +2,7 @@
 
 The project consists of the following modules:
 
-* `quarkus-redisstream-messaging-extension-sample`: A sample application demonstrating the usage of the Redis Streams extension.
-* `quarkus-redisstream-messaging-extension-parent`: A custom Quarkus extension that integrates Redis Streams as a reactive messaging connector, utilizing the core Quarkus Redis extension for managing Redis connections.
+* `quarkus-reactive-messaging-redisstream-extension-sample`: A sample application demonstrating the usage of the Redis Streams extension.
+* `quarkus-reactive-messaging-redisstream-extension-parent`: A custom Quarkus extension that integrates Redis Streams as a reactive messaging connector, utilizing the core Quarkus Redis extension for managing Redis connections.
 * `reactive-messaging-redisstream-connector`: Provides the core connector logic to integrate Redis Streams API with Reactive Messaging Specification.
 It does not directly build on any specific Redis library, but rather provides an interface that conforms to the Redis Streams commands.
