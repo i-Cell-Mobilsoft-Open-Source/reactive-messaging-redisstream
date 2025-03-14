@@ -1,6 +1,6 @@
 = Configuration
 
-The connector is identified by `icellmobilsoft-redis-streams`.
+The connector is identified by `reactive-messaging-redis-streams`.
 Below are the configuration attributes available for both inbound and outbound channels.
 
 [cols="2,5,1,1,1"]
@@ -48,7 +48,7 @@ For example if you use `quarkus.redis.*my-redis*.hosts` configuration then you c
 
 | `xread-noack`
 | Include the `NOACK` parameter in the `XREADGROUP` call
-| `false`
+| `true`
 | No
 | INCOMING
 

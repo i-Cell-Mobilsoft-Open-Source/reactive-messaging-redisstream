@@ -4,12 +4,21 @@
 :icons: font
 :imagesdir: pic
 
-= Reactive redisstream messaging
+= Reactive Messaging RedisStream
 
-The Redis Streams Connector integrates with Redis Streams to provide a reactive messaging solution using MicroProfile Reactive Messaging with.
-This connector supports both consuming (inbound) and producing (outgoing) messages to/from Redis Streams.
+This project provides a *Redis Stream*-based *SmallRye Reactive Messaging* connector that enables the use of the *MicroProfile Reactive Messaging API* over Redis Stream.
+The implementation allows seamless integration of asynchronous data streams into WildFly and Quarkus-based applications.
+
+For more details on *MicroProfile Reactive Messaging*, check:
+
+link:https://download.eclipse.org/microprofile/microprofile-reactive-messaging-1.0/microprofile-reactive-messaging-spec.html[MicroProfile Reactive Messaging Specification]
+
+For information on *SmallRye Reactive Messaging*, visit:
+
+link:https://download.eclipse.org/microprofile/microprofile-reactive-messaging-1.0/microprofile-reactive-messaging-spec.html[SmallRye Reactive Messaging]
 
 include::maven-modules.adoc[leveloffset=+1]
 include::connector/connector-core.adoc[leveloffset=+1]
 include::connector/configuration-reference.adoc[leveloffset=+1]
 include::examples/examples.adoc[leveloffset=+1]
+include::migration.adoc[leveloffset=+1]

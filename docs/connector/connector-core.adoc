@@ -33,7 +33,7 @@ You can use the `@Acknowledgment` annotation to control the acknowledgment behav
 
 [source,properties]
 ----
-mp.messaging.incoming.my-channel.connector=icellmobilsoft-redis-streams #<1>
+mp.messaging.incoming.my-channel.connector=reactive-messaging-redis-streams #<1>
 mp.messaging.incoming.my-channel.stream-key=mystream #<2>
 mp.messaging.incoming.my-channel.group=mygroup #<3>
 mp.messaging.incoming.my-channel.payload-field=message #<4>
@@ -50,7 +50,7 @@ mp.messaging.incoming.in-reactive.xread-noack=false #<7>
 The `COUNT` parameter of the `XREADGROUP` command.
 <6> The milliseconds to block during `XREADGROUP` calls.
 The `BLOCK` parameter of the `XREADGROUP` command.
-<6> Include `NOACK` option in the `XREADGROUP` calls.
+<7> Include `NOACK` option in the `XREADGROUP` calls.
 
 == Producing Messages
 
@@ -95,7 +95,7 @@ public Message<String> produce() {
 
 [source,properties]
 ----
-mp.messaging.outgoing.out-channel.connector=icellmobilsoft-redis-streams #<1>
+mp.messaging.outgoing.out-channel.connector=reactive-messaging-redis-streams #<1>
 mp.messaging.outgoing.out-channel.stream-key=mystream #<2>
 mp.messaging.incoming.out-channel.payload-field=message #<3>
 mp.messaging.outgoing.out-channel.xadd-maxlen=1000 #<4>
@@ -122,5 +122,5 @@ Configure the timeout via:
 
 [source,properties]
 ----
-mp.messaging.connector.icellmobilsoft-redis-streams.graceful-timeout-ms=30000
+mp.messaging.connector.reactive-messaging-redis-streams.graceful-timeout-ms=30000
 ----

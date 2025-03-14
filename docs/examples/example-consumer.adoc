@@ -28,16 +28,16 @@ mp:
   messaging:
     incoming:
       in-channel: #<1>
-        connector: icellmobilsoft-redis-streams #<2>
+        connector: reactive-messaging-redis-streams #<2>
         stream-key: mystream #<3>
         group: mygroup #<4>
         connection-key: my-redis-connection #<5>
         payload-field: message #optional defaults to 'message'
         xread-count: 10 #optional defaults to '1'
         xread-block-ms: 10000 #optional defaults to '5000'
-        xread-noack: true #optional defaults to 'false'
+        xread-noack: false #optional defaults to 'true'
     connector:
-      icellmobilsoft-redis-streams:
+      reactive-messaging-redis-streams:
         graceful-timeout-ms: 10000 #optional defaults to '60000' #<6>
 quarkus:
   redis:
