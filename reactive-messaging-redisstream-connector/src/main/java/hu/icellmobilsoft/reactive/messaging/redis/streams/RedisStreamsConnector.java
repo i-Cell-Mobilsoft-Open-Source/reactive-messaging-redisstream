@@ -122,7 +122,8 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      *
      * @param redisStreamsProducer
      *            the RedisStreamsProducer to be injected
-     * @param gracefulShutdownTimeout graceful timeout config in ms (default 60_000)
+     * @param gracefulShutdownTimeout
+     *            graceful timeout config in ms (default {@literal 60_000})
      */
     @Inject
     public RedisStreamsConnector(RedisStreamsProducer redisStreamsProducer,
@@ -207,7 +208,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      *            the configuration for the incoming Redis stream, including stream key, group, and other settings
      * @return the Multi for reading messages from the Redis stream
      */
-    private Multi<Message<Object>> xreadMulti(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
+    protected Multi<Message<Object>> xreadMulti(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         return Multi.createBy()
                 // Multi creation
                 .repeating()
@@ -276,7 +277,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     }
 
     /**
-     * Converts a StreamEntry to a microprofile recitve streams message and metadata.
+     * Converts a StreamEntry to a microprofile reactive streams message and metadata.
      *
      * @param redisAPI
      *            the RedisStreams instance
@@ -286,7 +287,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      *            the stream entry
      * @return the message
      */
-    private Message<Object> toMessage(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig, StreamEntry streamEntry) {
+    protected Message<Object> toMessage(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig, StreamEntry streamEntry) {
         String payloadField = incomingConfig.getPayloadField();
         Object payload = null;
         IncomingRedisStreamMetadata incomingRedisStreamMetadata = new IncomingRedisStreamMetadata(streamEntry.stream(), streamEntry.id());
@@ -317,7 +318,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      *            the stream entry
      * @return true if the entry has not expired, false otherwise
      */
-    private boolean notExpired(StreamEntry streamEntry) {
+    protected boolean notExpired(StreamEntry streamEntry) {
         if (streamEntry.fields() != null && !streamEntry.fields().isEmpty() && streamEntry.fields().containsKey("ttl")) {
             String ttl = streamEntry.fields().get("ttl");
             try {
@@ -375,11 +376,13 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      *            the incoming configuration
      * @return a CompletionStage representing the acknowledgment
      */
-    private Uni<Void> callXack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
+    protected Uni<Void> callXack(StreamEntry streamEntry, RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
         Uni<Long> longUni = redisAPI.xAck(incomingConfig.getStreamKey(), incomingConfig.getGroup(), streamEntry.id());
-        return longUni
-                .invoke(result -> log.tracev("ACK completed for id [{0}] with result [{1}]", streamEntry.id(), result)
-                )
+        return longUni.invoke(result -> log.tracev("ACK completed for id [{0}] with result [{1}]", streamEntry.id(), result))
+                .onFailure()
+                .retry()
+                .withBackOff(Duration.of(1, ChronoUnit.SECONDS), Duration.of(30, ChronoUnit.SECONDS))
+                .atMost(3)
                 .onFailure()
                 .recoverWithItem(throwable -> {
                     log.errorv(
@@ -412,36 +415,15 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             }
             return redisAPI.xGroupCreate(streamKey, group);
         })
-                .onFailure(this::isGroupAlreadyExists).recoverWithNull()
+                .onFailure(this::isGroupAlreadyExists)
+                .recoverWithNull()
+                .onFailure()
+                .retry()
+                .withBackOff(Duration.of(1, ChronoUnit.SECONDS), Duration.of(30, ChronoUnit.SECONDS))
+                .atMost(3)
                 // we created the group so prudent run is not needed anymore
                 .invoke(() -> prudentRun = false)
-                .replaceWith(
-                        redisAPI
-                                .xReadGroup(
-                                        streamKey,
-                                        group,
-                                        consumer,
-                                        incomingConfig.getXreadCount(),
-                                        incomingConfig.getXreadBlockMs(),
-                                        incomingConfig.getXreadNoack())
-                                // Redis connection error while waiting for XREADGROUP response
-                                .onFailure()
-                                .invoke(
-                                        e -> log.errorv(
-                                                e,
-                                                "Redis error occured while waiting for XREADGROUP on channel [{0}], error: [{1}]",
-                                                incomingConfig.getChannel(),
-                                                e.getMessage())
-                                )
-                                .onTermination()
-                                .invoke(
-                                        (items, throwable, isCancelled) -> log.tracev(
-                                                "Terminating XREADGROUP call on channel [{0}], items: [{1}], throwable:[{2}], isCancelled:[{3}]",
-                                                incomingConfig.getChannel(),
-                                                items,
-                                                throwable,
-                                                isCancelled)
-                                ));
+                .replaceWith(xReadGroup(redisAPI, incomingConfig, streamKey, group));
     }
 
     /**
@@ -465,45 +447,134 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         if (outgoingConfig.getXaddMaxlen().isPresent() && ttlMsOpt.isPresent()) {
             log.warnv("When both xadd-maxlen and xadd-ttl-ms is set only maxlen will be used!");
         }
-        return MultiUtils.via(multi -> multi.onItem().transformToUniAndMerge(message -> {
-            log.tracev("Sending message payload:[{0}] to redis stream:[{1}]", message.getPayload(), outgoingConfig.getStreamKey());
-            String minId = null;
-            String fieldTtl = null;
-            if (ttlMsOpt.isPresent()) {
-                Long ttlMs = ttlMsOpt.get();
-                Long epochMilli = Instant.now().toEpochMilli();
-                // current message's business ttl (now + ttl)
-                fieldTtl = String.valueOf(epochMilli + ttlMs);
-                // last not expired id (now - ttl)
-                minId = String.valueOf(epochMilli - ttlMs);
+        return MultiUtils.via(multi -> multi.onItem().transformToUniAndMerge(message -> xAdd(redisAPI, outgoingConfig, ttlMsOpt, message)));
+    }
+
+    /**
+     * Calls {@link RedisStreams#xReadGroup} reactively with the given config, and returns the read messages
+     *
+     * @param redisAPI
+     *            the RedisStreams instance used to interact with the Redis stream
+     * @param incomingConfig
+     *            the configuration for the incoming Redis stream, including stream key, group, and other settings
+     * @param streamKey
+     *            name of the input redis stream
+     * @param group
+     *            the name of the redis consumer group
+     * @return Uni containing the read message list. Can contain more than one message based on
+     *         {@link RedisStreamsConnectorIncomingConfiguration#getXreadCount()}
+     */
+    protected Uni<List<StreamEntry>> xReadGroup(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig, String streamKey,
+            String group) {
+        return redisAPI
+                .xReadGroup(
+                        streamKey,
+                        group,
+                        consumer,
+                        incomingConfig.getXreadCount(),
+                        incomingConfig.getXreadBlockMs(),
+                        incomingConfig.getXreadNoack())
+                // Redis connection error while waiting for XREADGROUP response
+                .onFailure()
+                .retry()
+                .withBackOff(Duration.of(1, ChronoUnit.SECONDS), Duration.of(30, ChronoUnit.SECONDS))
+                .atMost(3)
+                .onFailure()
+                .invoke(
+                        e -> log.errorv(
+                                e,
+                                "Redis error occured while waiting for XREADGROUP on channel [{0}], error: [{1}]",
+                                incomingConfig.getChannel(),
+                                e.getMessage()))
+                .onTermination()
+                .invoke(
+                        (items, throwable, isCancelled) -> log.tracev(
+                                "Terminating XREADGROUP call on channel [{0}], items: [{1}], throwable:[{2}], isCancelled:[{3}]",
+                                incomingConfig.getChannel(),
+                                items,
+                                throwable,
+                                isCancelled));
+    }
+
+    /**
+     * Calls {@link RedisStreams#xAdd} reactively with the given config
+     *
+     * @param redisAPI
+     *            the RedisStreams instance used to interact with the Redis stream
+     * @param outgoingConfig
+     *            the configuration for the output Redis stream, including stream key, group, and other settings
+     * @param ttlMsOpt
+     *            the RedisStreams instance used to interact with the Redis stream
+     * @param message
+     *            Raw message data to be converted to redis stream message. Contains the actual payload and metadata records.
+     * @return Uni containing the result of {@link RedisStreams#xAdd(String, String, Integer, Boolean, String, Map)}, the ID of the added message
+     */
+    protected Uni<String> xAdd(RedisStreams redisAPI, RedisStreamsConnectorOutgoingConfiguration outgoingConfig, Optional<Long> ttlMsOpt,
+            Message<?> message) {
+        log.tracev("Sending message payload:[{0}] to redis stream:[{1}]", message.getPayload(), outgoingConfig.getStreamKey());
+        String minId = null;
+        String fieldTtl = null;
+        if (ttlMsOpt.isPresent()) {
+            Long ttlMs = ttlMsOpt.get();
+            Long epochMilli = Instant.now().toEpochMilli();
+            // current message's business ttl (now + ttl)
+            fieldTtl = String.valueOf(epochMilli + ttlMs);
+            // last not expired id (now - ttl)
+            minId = String.valueOf(epochMilli - ttlMs);
+        }
+        return redisAPI.xAdd(
+                outgoingConfig.getStreamKey(),
+                "*",
+                outgoingConfig.getXaddMaxlen().orElse(null),
+                outgoingConfig.getXaddExactMaxlen(),
+                minId,
+                createRedisMessageFields(message, outgoingConfig, fieldTtl));
+    }
+
+    /**
+     * Creates the map for the fields of the new redis stream message
+     *
+     * @param message
+     *            Raw message data to be converted to redis stream message. Contains the actual payload and metadata records.
+     * @param outgoingConfig
+     *            the configuration for the output Redis stream, including stream key, group, and other settings
+     * @param fieldTtl
+     *            value for the ttl field of the redis stream message
+     * @return the created fields
+     */
+    protected Map<String, String> createRedisMessageFields(Message<?> message, RedisStreamsConnectorOutgoingConfiguration outgoingConfig,
+            String fieldTtl) {
+        Map<String, String> streamEntryFields = new HashMap<>();
+        streamEntryFields.put(outgoingConfig.getPayloadField(), message.getPayload().toString());
+        if (fieldTtl != null) {
+            streamEntryFields.put("ttl", fieldTtl);
+        }
+        Optional<RedisStreamMetadata> redisStreamMetadata = message.getMetadata().get(RedisStreamMetadata.class);
+        if (redisStreamMetadata.isEmpty()) {
+            return streamEntryFields;
+        }
+
+        Map<String, String> additionalFields = redisStreamMetadata.get().getAdditionalFields();
+        for (Map.Entry<String, String> entry : additionalFields.entrySet()) {
+            String valuePresent = streamEntryFields.putIfAbsent(entry.getKey(), entry.getValue());
+            if (valuePresent != null) {
+                log.warnv(
+                        "Ignoring RedisStreamMetadata.additionalFields entry key:[{0}] with value: [{1}] since key is already present with value:[{2}]",
+                        entry.getKey(),
+                        entry.getValue(),
+                        valuePresent);
             }
-            Map<String, String> streamEntryFields = new HashMap<>();
-            streamEntryFields.put(outgoingConfig.getPayloadField(), message.getPayload().toString());
-            if (fieldTtl != null) {
-                streamEntryFields.put("ttl", fieldTtl);
-            }
-            Optional<RedisStreamMetadata> redisStreamMetadata = message.getMetadata().get(RedisStreamMetadata.class);
-            if (redisStreamMetadata.isPresent()) {
-                Map<String, String> additionalFields = redisStreamMetadata.get().getAdditionalFields();
-                for (Map.Entry<String, String> entry : additionalFields.entrySet()) {
-                    String valuePresent = streamEntryFields.putIfAbsent(entry.getKey(), entry.getValue());
-                    if (valuePresent != null) {
-                        log.warnv(
-                                "Ignoring RedisStreamMetadata.additionalFields entry key:[{0}] with value: [{1}] since key is already present with value:[{2}]",
-                                entry.getKey(),
-                                entry.getValue(),
-                                valuePresent);
-                    }
-                }
-            }
-            return redisAPI.xAdd(
-                    outgoingConfig.getStreamKey(),
-                    "*",
-                    outgoingConfig.getXaddMaxlen().orElse(null),
-                    outgoingConfig.getXaddExactMaxlen(),
-                    minId,
-                    streamEntryFields);
-        }));
+        }
+        return streamEntryFields;
+    }
+
+    /**
+     * Returns the count of the started but not finished messages
+     *
+     * @return the count of the started but not finished messages
+     */
+    public int getUnderProcessingSize() {
+        return underProcessing.size();
     }
 
     private boolean isGroupAlreadyExists(Throwable throwable) {
