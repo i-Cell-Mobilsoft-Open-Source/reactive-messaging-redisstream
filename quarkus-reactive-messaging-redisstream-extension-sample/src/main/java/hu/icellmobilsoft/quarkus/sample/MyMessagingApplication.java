@@ -19,7 +19,7 @@
  */
 package hu.icellmobilsoft.quarkus.sample;
 
-import hu.icellmobilsoft.reactive.messaging.redis.streams.IncomingRedisStreamMetadata;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.IncomingRedisStreamMetadata;
 import io.quarkus.logging.Log;
 import io.quarkus.runtime.StartupEvent;
 import io.smallrye.mutiny.Uni;

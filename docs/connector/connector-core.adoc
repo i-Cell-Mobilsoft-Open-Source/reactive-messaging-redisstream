@@ -50,7 +50,7 @@ mp.messaging.incoming.in-reactive.xread-noack=false #<7>
 The `COUNT` parameter of the `XREADGROUP` command.
 <6> The milliseconds to block during `XREADGROUP` calls.
 The `BLOCK` parameter of the `XREADGROUP` command.
-<6> Include `NOACK` option in the `XREADGROUP` calls.
+<7> Include `NOACK` option in the `XREADGROUP` calls.
 
 == Producing Messages
 

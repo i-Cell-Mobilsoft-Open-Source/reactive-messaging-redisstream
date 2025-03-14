@@ -17,7 +17,7 @@
  * limitations under the License.
  * #L%
  */
-package hu.icellmobilsoft.reactive.messaging.redis.streams;
+package hu.icellmobilsoft.reactive.messaging.redis.streams.concurrent;
 
 import java.util.concurrent.Semaphore;
 

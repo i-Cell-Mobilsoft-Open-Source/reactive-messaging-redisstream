@@ -19,7 +19,7 @@
  */
 package hu.icellmobilsoft.quarkus.sample.mdc;
 
-import hu.icellmobilsoft.reactive.messaging.redis.streams.IncomingRedisStreamMetadata;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.IncomingRedisStreamMetadata;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.reactive.messaging.PublisherDecorator;
 import jakarta.enterprise.context.ApplicationScoped;

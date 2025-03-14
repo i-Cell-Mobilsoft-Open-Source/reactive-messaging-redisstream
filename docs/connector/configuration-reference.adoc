@@ -48,7 +48,7 @@ For example if you use `quarkus.redis.*my-redis*.hosts` configuration then you c
 
 | `xread-noack`
 | Include the `NOACK` parameter in the `XREADGROUP` call
-| `false`
+| `true`
 | No
 | INCOMING
 
