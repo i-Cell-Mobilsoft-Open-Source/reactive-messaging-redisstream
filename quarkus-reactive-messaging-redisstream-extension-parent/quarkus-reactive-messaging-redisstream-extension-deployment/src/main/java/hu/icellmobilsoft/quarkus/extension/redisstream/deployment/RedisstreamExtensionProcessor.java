@@ -53,11 +53,18 @@ import io.vertx.mutiny.redis.client.RedisAPI;
  * @since 1.0.0
  * @author mark.petrenyi
  */
-class RedisstreamExtensionProcessor {
+public class RedisstreamExtensionProcessor {
 
     private static final String FEATURE = "redisstream-extension";
 
     private static final String CHANNEL_PROPERTY_FORMAT = "mp.messaging.%s.%s.%s";
+
+    /**
+     * Default constructor
+     */
+    public RedisstreamExtensionProcessor() {
+        // Default constructor for jdk 21
+    }
 
     /**
      * Registers the Redis Stream extension feature.
