@@ -4,7 +4,7 @@
     <parent>
         <groupId>hu.icellmobilsoft.reactive.messaging.redisstream</groupId>
         <artifactId>reactive-messaging-redisstream</artifactId>
-        <version>1.0.4-SNAPSHOT</version>
+        <version>1.0.4</version>
     </parent>
 
     <artifactId>quarkus-reactive-messaging-redisstream-extension-sample</artifactId>
