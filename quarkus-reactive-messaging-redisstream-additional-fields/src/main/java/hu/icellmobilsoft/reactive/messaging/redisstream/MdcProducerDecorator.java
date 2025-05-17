@@ -17,41 +17,51 @@
  * limitations under the License.
  * #L%
  */
-package hu.icellmobilsoft.quarkus.sample.mdc;
+package hu.icellmobilsoft.reactive.messaging.redisstream;
 
-import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.IncomingRedisStreamMetadata;
-import io.smallrye.mutiny.Multi;
-import io.smallrye.reactive.messaging.PublisherDecorator;
+import java.util.List;
+import java.util.Optional;
+
 import jakarta.enterprise.context.ApplicationScoped;
+
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.jboss.logmanager.MDC;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.RedisStreamMetadata;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.reactive.messaging.SubscriberDecorator;
 
 /**
- * Put all addtitionalField from message metadata to MDC
+ * Put all MDC to message metadata
+ * 
+ * @since 1.1.0
+ * @author mark.petrenyi
  */
 @ApplicationScoped
-public class MdcConsumerDecorator implements PublisherDecorator {
+public class MdcProducerDecorator implements SubscriberDecorator {
 
     /**
      * Default constructor
      */
-    public MdcConsumerDecorator() {
+    public MdcProducerDecorator() {
         // NOTE: For jdk 21.
     }
 
     @Override
     public Multi<? extends Message<?>> decorate(Multi<? extends Message<?>> publisher, List<String> channelName, boolean isConnector) {
-        return publisher.invoke(message -> {
-            Optional<IncomingRedisStreamMetadata> incomingRedisStreamMetadata = message.getMetadata().get(IncomingRedisStreamMetadata.class);
-            // don't have to map MDC in case of messages inside
-            if (isConnector && incomingRedisStreamMetadata.isPresent()) {
-                Map<String, String> additionalFields = incomingRedisStreamMetadata.get().getAdditionalFields();
-                additionalFields.forEach(MDC::put);
+        return publisher.map(message -> {
+            if (!isConnector) {
+                // don't have to map MDC in case of messages inside
+                return message;
+            }
+            Optional<RedisStreamMetadata> redisStreamMetadataPresent = message.getMetadata().get(RedisStreamMetadata.class);
+            if (redisStreamMetadataPresent.isPresent()) {
+                redisStreamMetadataPresent.get().withAdditionalFields(MDC.copy());
+                return message;
+            } else {
+                return message.addMetadata(new RedisStreamMetadata().withAdditionalFields(MDC.copy()));
             }
         });
     }
+
 }
