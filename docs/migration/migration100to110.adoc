@@ -1,0 +1,10 @@
+= 1.0.0 -> 1.1.0
+
+== quarkus-reactive-messaging-redisstream-additional-fields module
+
+* Introduced the new `quarkus-reactive-messaging-redisstream-additional-fields` module
+for MDC support in the redis stream additional fields.
+
+=== Migration
+
+Changes are backwards compatible doesn't need any migration.

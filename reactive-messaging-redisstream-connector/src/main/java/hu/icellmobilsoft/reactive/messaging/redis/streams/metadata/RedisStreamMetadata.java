@@ -51,12 +51,26 @@ public class RedisStreamMetadata {
     /**
      * Put key and value parameter into additionalFields map
      *
-     * @param key   additionalField's key
-     * @param value value for key in additionalField
+     * @param key
+     *            additionalField's key
+     * @param value
+     *            value for key in additionalField
      * @return actual object
      */
     public RedisStreamMetadata withAdditionalField(String key, String value) {
         additionalFields.put(key, value);
+        return this;
+    }
+
+    /**
+     * Put key and value parameter into additionalFields map
+     *
+     * @param additionalFields
+     *            additional fields to add
+     * @return actual object
+     */
+    public RedisStreamMetadata withAdditionalFields(Map<String, String> additionalFields) {
+        this.additionalFields.putAll(additionalFields);
         return this;
     }
 }

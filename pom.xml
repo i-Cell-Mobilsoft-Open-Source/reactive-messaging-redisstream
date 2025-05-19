@@ -43,6 +43,7 @@
         <module>reactive-messaging-redisstream-connector</module>
         <module>quarkus-reactive-messaging-redisstream-extension-sample</module>
         <module>quarkus-reactive-messaging-redisstream-extension-parent</module>
+        <module>quarkus-reactive-messaging-redisstream-additional-fields</module>
     </modules>
 
 

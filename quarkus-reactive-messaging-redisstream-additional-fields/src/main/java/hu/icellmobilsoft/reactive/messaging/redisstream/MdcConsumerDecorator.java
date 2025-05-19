@@ -17,45 +17,46 @@
  * limitations under the License.
  * #L%
  */
-package hu.icellmobilsoft.quarkus.sample.mdc;
+package hu.icellmobilsoft.reactive.messaging.redisstream;
 
-import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.RedisStreamMetadata;
-import io.smallrye.mutiny.Multi;
-import io.smallrye.reactive.messaging.SubscriberDecorator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
 import jakarta.enterprise.context.ApplicationScoped;
+
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.jboss.logmanager.MDC;
 
-import java.util.List;
-import java.util.Optional;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.IncomingRedisStreamMetadata;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.reactive.messaging.PublisherDecorator;
 
 /**
- * Put all MDC to message metadata
+ * Put all additionalField from message metadata to MDC
+ * 
+ * @since 1.1.0
+ * @author mark.petrenyi
  */
 @ApplicationScoped
-public class MdcProducerDecorator implements SubscriberDecorator {
+public class MdcConsumerDecorator implements PublisherDecorator {
 
     /**
      * Default constructor
      */
-    public MdcProducerDecorator() {
+    public MdcConsumerDecorator() {
         // NOTE: For jdk 21.
     }
 
     @Override
     public Multi<? extends Message<?>> decorate(Multi<? extends Message<?>> publisher, List<String> channelName, boolean isConnector) {
-        return publisher.map(message -> {
+        return publisher.invoke(message -> {
+            Optional<IncomingRedisStreamMetadata> incomingRedisStreamMetadata = message.getMetadata().get(IncomingRedisStreamMetadata.class);
             // don't have to map MDC in case of messages inside
-            if (isConnector) {
-                Optional<RedisStreamMetadata> redisStreamMetadataPresent = message.getMetadata().get(RedisStreamMetadata.class);
-                if (redisStreamMetadataPresent.isEmpty()) {
-                    RedisStreamMetadata redisStreamMetadata = new RedisStreamMetadata();
-                    redisStreamMetadata.getAdditionalFields().putAll(MDC.copy());
-                    return message.addMetadata(redisStreamMetadata);
-                }
+            if (isConnector && incomingRedisStreamMetadata.isPresent()) {
+                Map<String, String> additionalFields = incomingRedisStreamMetadata.get().getAdditionalFields();
+                additionalFields.forEach(MDC::put);
             }
-            return message;
-        }
-        );
+        });
     }
 }

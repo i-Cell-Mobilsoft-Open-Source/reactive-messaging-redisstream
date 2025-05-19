@@ -30,6 +30,12 @@
                 <artifactId>reactive-messaging-redisstream-connector</artifactId>
                 <version>${project.version}</version>
             </dependency>
+
+            <dependency>
+                <groupId>hu.icellmobilsoft.reactive.messaging.redisstream</groupId>
+                <artifactId>quarkus-reactive-messaging-redisstream-additional-fields</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 </project>

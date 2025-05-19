@@ -2,4 +2,4 @@
 
 Next section describes the changes between releases.
 
-//include::migration/sample_migration100to110.adoc[leveloffset=+1]
+include::migration/migration100to110.adoc[leveloffset=+1]
