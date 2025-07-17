@@ -31,6 +31,7 @@ import java.util.Map;
 public class RedisStreamMetadata {
 
     private final Map<String, String> additionalFields = new HashMap<>();
+    private String flowIdExtension;
 
     /**
      * Default constructor
@@ -72,5 +73,24 @@ public class RedisStreamMetadata {
     public RedisStreamMetadata withAdditionalFields(Map<String, String> additionalFields) {
         this.additionalFields.putAll(additionalFields);
         return this;
+    }
+
+    /**
+     * Returns the flow id, which will be appended to the SID
+     * 
+     * @return the flow id, which will be appended to the SID
+     */
+    public String getFlowIdExtension() {
+        return flowIdExtension;
+    }
+
+    /**
+     * Sets the flow id, which will be appended to the SID
+     * 
+     * @param flowIdExtension
+     *            the flow id, which will be appended to the SID
+     */
+    public void setFlowIdExtension(String flowIdExtension) {
+        this.flowIdExtension = flowIdExtension;
     }
 }
