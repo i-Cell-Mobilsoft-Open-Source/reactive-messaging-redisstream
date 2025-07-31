@@ -3,7 +3,7 @@
 == quarkus-reactive-messaging-redisstream-additional-fields module
 
 * Introduced the new `quarkus-reactive-messaging-redisstream-additional-fields` module
-for MDC support in the redis stream additional fields.
+for MDC support (i.e. `extSessionId`) in the redis stream additional fields with overridable methods.
 
 === Migration
 

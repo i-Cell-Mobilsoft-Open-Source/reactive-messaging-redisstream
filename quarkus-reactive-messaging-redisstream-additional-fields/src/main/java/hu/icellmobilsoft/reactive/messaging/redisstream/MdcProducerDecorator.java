@@ -20,12 +20,13 @@
 package hu.icellmobilsoft.reactive.messaging.redisstream;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.eclipse.microprofile.reactive.messaging.Message;
-import org.jboss.logmanager.MDC;
+import org.jboss.logging.MDC;
 
 import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.RedisStreamMetadata;
 import io.smallrye.mutiny.Multi;
@@ -56,12 +57,30 @@ public class MdcProducerDecorator implements SubscriberDecorator {
             }
             Optional<RedisStreamMetadata> redisStreamMetadataPresent = message.getMetadata().get(RedisStreamMetadata.class);
             if (redisStreamMetadataPresent.isPresent()) {
-                redisStreamMetadataPresent.get().withAdditionalFields(MDC.copy());
+                redisStreamMetadataPresent.get().withAdditionalFields(getAdditionalFields(redisStreamMetadataPresent.get()));
                 return message;
             } else {
-                return message.addMetadata(new RedisStreamMetadata().withAdditionalFields(MDC.copy()));
+                return message.addMetadata(new RedisStreamMetadata().withAdditionalFields(getAdditionalFields(null)));
             }
         });
     }
 
+    /**
+     * Put redis message additionalFields from MDC
+     * 
+     * @param redisStreamMetadata
+     *            metadata containing additionalFields and flowIdExtension
+     * @return a map that should be added to redis stream additional fields
+     */
+    protected Map<String, String> getAdditionalFields(RedisStreamMetadata redisStreamMetadata) {
+        return Map.of(LogConstants.LOG_SESSION_ID, getFlowIdMessage(redisStreamMetadata == null ? null : redisStreamMetadata.getFlowIdExtension()));
+    }
+
+    private String getFlowIdMessage(String flowIdExtension) {
+        String flowIdMessage = (String) MDC.get(LogConstants.LOG_SESSION_ID);
+        if (flowIdExtension == null) {
+            return flowIdMessage;
+        }
+        return flowIdMessage + "_" + flowIdExtension;
+    }
 }

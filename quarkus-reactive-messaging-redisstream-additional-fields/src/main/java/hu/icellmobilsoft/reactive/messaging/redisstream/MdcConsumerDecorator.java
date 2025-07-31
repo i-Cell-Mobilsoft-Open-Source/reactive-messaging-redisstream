@@ -55,8 +55,18 @@ public class MdcConsumerDecorator implements PublisherDecorator {
             // don't have to map MDC in case of messages inside
             if (isConnector && incomingRedisStreamMetadata.isPresent()) {
                 Map<String, String> additionalFields = incomingRedisStreamMetadata.get().getAdditionalFields();
-                additionalFields.forEach(MDC::put);
+                processAdditionalFields(additionalFields);
             }
         });
+    }
+
+    /**
+     * Put additionalFields from message metadata to MDC
+     *
+     * @param additionalFields
+     *            additional fields to add
+     */
+    protected void processAdditionalFields(Map<String, String> additionalFields) {
+        MDC.put(LogConstants.LOG_SESSION_ID, additionalFields.get(LogConstants.LOG_SESSION_ID));
     }
 }
