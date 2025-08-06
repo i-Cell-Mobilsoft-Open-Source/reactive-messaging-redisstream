@@ -59,11 +59,13 @@ import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.IncomingRedis
 import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.RedisStreamMetadata;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.groups.UniRetry;
 import io.smallrye.reactive.messaging.annotations.ConnectorAttribute;
 import io.smallrye.reactive.messaging.connector.InboundConnector;
 import io.smallrye.reactive.messaging.connector.OutboundConnector;
 import io.smallrye.reactive.messaging.providers.connectors.ExecutionHolder;
 import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
+import io.smallrye.reactive.messaging.providers.helpers.SenderProcessor;
 import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
 import io.vertx.mutiny.core.Vertx;
 
@@ -75,12 +77,14 @@ import io.vertx.mutiny.core.Vertx;
  */
 @ApplicationScoped
 @Connector(RedisStreamsConnector.REACTIVE_MESSAGING_REDIS_STREAMS_CONNECTOR)
+// General incoming and outgoing connector attributes
 @ConnectorAttribute(name = RedisStreamsConnector.REDIS_STREAM_CONNECTION_KEY_CONFIG, description = "The redis connection key to use",
         defaultValue = RedisStreamsProducer.DEFAULT_CONNECTION_KEY, type = "string", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
 @ConnectorAttribute(name = "stream-key", description = "The Redis key holding the stream items", mandatory = true, type = "string",
         direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
 @ConnectorAttribute(name = "payload-field", description = "The stream entry field name containing the message payload", type = "string",
         defaultValue = "message", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING)
+// Redis specific incoming connector attributes
 @ConnectorAttribute(name = "group", description = "The consumer group of the Redis stream to read from", mandatory = true, type = "string",
         direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xread-count", description = "The maximum number of entries to receive upon an XREADGROUP call", type = "int",
@@ -92,12 +96,26 @@ import io.vertx.mutiny.core.Vertx;
         direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "broadcast", description = "Allow the received entries to be consumed by multiple channels", type = "boolean", defaultValue = "false",
         direction = ConnectorAttribute.Direction.INCOMING)
+// Redis specific outgoing connector attributes
 @ConnectorAttribute(name = "xadd-maxlen", description = "The maximum number of entries to keep in the stream", type = "int",
         direction = ConnectorAttribute.Direction.OUTGOING)
 @ConnectorAttribute(name = "xadd-exact-maxlen", description = "Use exact trimming for MAXLEN parameter", type = "boolean", defaultValue = "false",
         direction = ConnectorAttribute.Direction.OUTGOING)
 @ConnectorAttribute(name = "xadd-ttl-ms", description = "Milliseconds to keep an entry in the stream", type = "long",
         direction = ConnectorAttribute.Direction.OUTGOING)
+// Reactive Messaging specific outgoing connector attributes
+@ConnectorAttribute(name = "wait-for-write-completion", type = "boolean", direction = ConnectorAttribute.Direction.OUTGOING,
+        description = "Whether the Redis client waits for the XADD to respond before acknowledging the message", defaultValue = "true")
+@ConnectorAttribute(name = "max-inflight-messages", type = "long", direction = ConnectorAttribute.Direction.OUTGOING,
+        description = "The maximum number of messages to be written to the RedisStream concurrently. You can set this attribute to `0` remove the limit",
+        defaultValue = "1024")
+@ConnectorAttribute(name = "retries", type = "long", direction = ConnectorAttribute.Direction.OUTGOING,
+        description = "The maximum number of retries for sending messages to the Redis stream. If the value is set to `0`, no retries will be performed. If set to negative number, it will retry indefinitely.",
+        defaultValue = "3")
+@ConnectorAttribute(name = "retry-initial-delay-ms", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING,
+        description = "The initial delay for the retry.", type = "long", defaultValue = "1000")
+@ConnectorAttribute(name = "retry-max-delay-ms", direction = ConnectorAttribute.Direction.INCOMING_AND_OUTGOING, description = "The maximum delay",
+        type = "long", defaultValue = "10000")
 public class RedisStreamsConnector implements InboundConnector, OutboundConnector {
 
     /**
@@ -467,7 +485,16 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         if (outgoingConfig.getXaddMaxlen().isPresent() && ttlMsOpt.isPresent()) {
             log.warnv("When both xadd-maxlen and xadd-ttl-ms is set only maxlen will be used!");
         }
-        return MultiUtils.via(multi -> multi.onItem().transformToUniAndMerge(message -> xAdd(redisAPI, outgoingConfig, ttlMsOpt, message)));
+
+        long maxInflightMessages = outgoingConfig.getMaxInflightMessages();
+        SenderProcessor processor = new SenderProcessor(
+                maxInflightMessages > 0 ? maxInflightMessages : Long.MAX_VALUE,
+                outgoingConfig.getWaitForWriteCompletion(),
+                message -> xAdd(redisAPI, outgoingConfig, ttlMsOpt, message).replaceWithVoid());
+
+        return MultiUtils.via(processor, m -> m.onFailure().invoke(f -> {
+            log.error("Error occurred while sending message to Redis stream!", f);
+        }));
     }
 
     /**
@@ -542,13 +569,40 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             // last not expired id (now - ttl)
             minId = String.valueOf(epochMilli - ttlMs);
         }
-        return redisAPI.xAdd(
+        Uni<String> xaddUni = redisAPI.xAdd(
                 outgoingConfig.getStreamKey(),
                 "*",
                 outgoingConfig.getXaddMaxlen().orElse(null),
                 outgoingConfig.getXaddExactMaxlen(),
                 minId,
-                createRedisMessageFields(message, outgoingConfig, fieldTtl));
+                createRedisMessageFields(message, outgoingConfig, fieldTtl))
+                .onFailure()
+                .invoke(
+                        e -> log.errorv(
+                                e,
+                                "Error occurred while sending message to redis stream [{0}] and message [{1}]: {2}",
+                                outgoingConfig.getStreamKey(),
+                                message.getPayload(),
+                                e.getMessage())
+                );
+        long retries = outgoingConfig.getRetries();
+        if (retries == 0) {
+            // no retries, just return the Uni
+            return xaddUni;
+        }
+        long retryInitialDelayMs = outgoingConfig.getRetryInitialDelayMs();
+        long retryMaxDelayMs = outgoingConfig.getRetryMaxDelayMs();
+        UniRetry<String> uniRetry = xaddUni
+                .onFailure()
+                .retry()
+                .withBackOff(Duration.ofMillis(retryInitialDelayMs), Duration.ofSeconds(retryMaxDelayMs));
+
+        if (retries > 0) {
+            // retry at most the configured number of times
+            return uniRetry.atMost(retries);
+        }
+        // otherwise retry indefinitely
+        return uniRetry.indefinitely();
     }
 
     /**
