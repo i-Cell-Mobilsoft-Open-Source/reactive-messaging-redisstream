@@ -9,6 +9,7 @@
 
     <artifactId>quarkus-reactive-messaging-redisstream-additional-fields</artifactId>
 
+    <name>${project.artifactId}</name>
     <properties>
         <quarkus.version>${quarkus.platform.version}</quarkus.version>
     </properties>
