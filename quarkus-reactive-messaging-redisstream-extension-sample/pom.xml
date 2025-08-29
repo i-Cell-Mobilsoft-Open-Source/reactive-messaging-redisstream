@@ -8,6 +8,7 @@
     </parent>
 
     <artifactId>quarkus-reactive-messaging-redisstream-extension-sample</artifactId>
+    <name>${project.artifactId}</name>
 
     <properties>
         <skipITs>true</skipITs>
