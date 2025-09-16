@@ -1,0 +1,41 @@
+mp:
+  messaging:
+    connector:
+      reactive-messaging-redis-streams:
+        graceful-timeout-ms: 10000
+    incoming:
+      words-in:
+        connector: reactive-messaging-redis-streams
+        group: sample-service
+        stream-key: sample-stream
+        xread-block-ms: 60000
+        #connection-key: redis2
+    outgoing:
+      words-out:
+        connector: reactive-messaging-redis-streams
+        stream-key: sample-stream
+        xadd-maxlen: 1000
+        xadd-ttl-ms: 100000
+        wait-for-write-completion: false
+        max-inflight-messages: 1
+quarkus:
+  redis:
+    max-pool-size: 60
+    max-pool-waiting: 100
+  #  redis:
+  #    redis2:
+  #      hosts: redis://localhost:6379
+  log:
+    category:
+      "hu.icellmobilsoft":
+        #          level: TRACE
+        min-level: TRACE
+      "hu.icellmobilsoft.quarkus.extension.redisstream.runtime.QuarkusRedisStreamsAdapter":
+        level: TRACE
+    console:
+      format: '%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c{3.}] (%t) [sid:%X{extSessionId}] %s%e%n'
+smallrye:
+  messaging:
+    worker:
+      incoming-pool:
+        max-concurrency: 100
