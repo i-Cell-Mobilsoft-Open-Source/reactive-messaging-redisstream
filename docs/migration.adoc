@@ -3,3 +3,4 @@
 Next section describes the changes between releases.
 
 include::migration/migration100to110.adoc[leveloffset=+1]
+include::migration/migration110to120.adoc[leveloffset=+1]
