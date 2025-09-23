@@ -34,6 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Priority;
@@ -110,7 +111,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     private final RedisStreamsProducer redisStreamsProducer;
     private String consumer;
     private volatile boolean consumerCancelled = false;
-    private volatile boolean prudentRun = true;
+    private final ConcurrentHashMap<String, AtomicBoolean> prudentRunMap = new ConcurrentHashMap<>();
     private final List<Flow.Subscription> subscriptions = new CopyOnWriteArrayList<>();
     private final List<RedisStreams> redisStreams = new CopyOnWriteArrayList<>();
     private final Set<String> underProcessing = ConcurrentHashMap.newKeySet();
@@ -209,6 +210,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      * @return the Multi for reading messages from the Redis stream
      */
     protected Multi<Message<Object>> xreadMulti(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
+        final AtomicBoolean prudentRunFlag = getOrCreatePrudentRunFlag(incomingConfig);
         return Multi.createBy()
                 // Multi creation
                 .repeating()
@@ -218,7 +220,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 // Log first or recovered subscription to multi
                 .onSubscription()
                 .invoke(() -> {
-                    if (prudentRun) {
+                    if (prudentRunFlag.get()) {
                         log.infov(
                                 "Subscribing channel [{0}] to redis stream [{1}] consuming group [{2}] as consumer [{3}] using redis connection key [{4}]",
                                 incomingConfig.getChannel(),
@@ -260,7 +262,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                                 "Uncaught exception while processing messages from channel [{0}], trying to recover..",
                                 incomingConfig.getChannel());
                         // ensure that the subscription is logged again to have information on recovery
-                        prudentRun = true;
+                        prudentRunFlag.set(true);
                     }
                     // try to recover only if the consumer is not cancelled
                     return !consumerCancelled;
@@ -407,9 +409,10 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      * @return a Uni containing a list of stream entries read from the Redis stream
      */
     private Uni<List<StreamEntry>> xReadMessage(RedisStreams redisAPI, RedisStreamsConnectorIncomingConfiguration incomingConfig) {
+        final AtomicBoolean prudentRunFlag = getOrCreatePrudentRunFlag(incomingConfig);
         String streamKey = incomingConfig.getStreamKey();
         String group = incomingConfig.getGroup();
-        return Uni.createFrom().item(prudentRun).flatMap(prudent -> {
+        return Uni.createFrom().item(prudentRunFlag.get()).flatMap(prudent -> {
             if (!prudent) {
                 return Uni.createFrom().item(true);
             }
@@ -422,7 +425,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .withBackOff(Duration.of(1, ChronoUnit.SECONDS), Duration.of(30, ChronoUnit.SECONDS))
                 .atMost(3)
                 // we created the group so prudent run is not needed anymore
-                .invoke(() -> prudentRun = false)
+                .invoke(() -> prudentRunFlag.set(false))
                 .replaceWith(xReadGroup(redisAPI, incomingConfig, streamKey, group));
     }
 
@@ -579,6 +582,11 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
 
     private boolean isGroupAlreadyExists(Throwable throwable) {
         return Optional.ofNullable(throwable.getMessage()).filter(m -> m.startsWith("BUSYGROUP")).isPresent();
+    }
+
+    private AtomicBoolean getOrCreatePrudentRunFlag(RedisStreamsConnectorIncomingConfiguration incomingConfig) {
+        String key = incomingConfig.getStreamKey() + "::" + incomingConfig.getGroup();
+        return prudentRunMap.computeIfAbsent(key, k -> new AtomicBoolean(true));
     }
 
 }
