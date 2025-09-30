@@ -90,6 +90,8 @@ import io.vertx.mutiny.core.Vertx;
 @ConnectorAttribute(name = "xread-noack", description = "Include the NOACK parameter in the XREADGROUP call", type = "boolean",
         defaultValue = "true",
         direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "broadcast", description = "Allow the received entries to be consumed by multiple channels", type = "boolean", defaultValue = "false",
+        direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xadd-maxlen", description = "The maximum number of entries to keep in the stream", type = "int",
         direction = ConnectorAttribute.Direction.OUTGOING)
 @ConnectorAttribute(name = "xadd-exact-maxlen", description = "Use exact trimming for MAXLEN parameter", type = "boolean", defaultValue = "false",
@@ -205,7 +207,11 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
 
         RedisStreams redisAPI = redisStreamsProducer.produce(incomingConfig.getConnectionKey());
         redisStreams.add(redisAPI);
-        return xreadMulti(redisAPI, incomingConfig);
+        Multi<Message<Object>> publisher = xreadMulti(redisAPI, incomingConfig);
+        if(Boolean.TRUE.equals(incomingConfig.getBroadcast())){
+            publisher = publisher.broadcast().toAllSubscribers();
+        }
+        return publisher;
     }
 
     /**
