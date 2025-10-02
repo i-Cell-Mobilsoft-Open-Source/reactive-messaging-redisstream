@@ -19,14 +19,16 @@
  */
 package hu.icellmobilsoft.quarkus.sample;
 
-import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.IncomingRedisStreamMetadata;
-import io.quarkus.logging.Log;
-import io.quarkus.runtime.StartupEvent;
-import io.smallrye.mutiny.Uni;
-import io.smallrye.reactive.messaging.annotations.Blocking;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
+
 import org.eclipse.microprofile.faulttolerance.Retry;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
@@ -35,10 +37,11 @@ import org.eclipse.microprofile.reactive.messaging.Message;
 import org.eclipse.microprofile.reactive.messaging.Outgoing;
 import org.jboss.logging.MDC;
 
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.IncomingRedisStreamMetadata;
+import io.quarkus.logging.Log;
+import io.quarkus.runtime.StartupEvent;
+import io.smallrye.mutiny.Uni;
+import io.smallrye.reactive.messaging.annotations.Blocking;
 
 /**
  * Class that handles messages
@@ -99,6 +102,32 @@ public class MyMessagingApplication {
     @Blocking(ordered = false, value = "incoming-pool")
     @Retry(maxRetries = 2)
     public String toUpperCase(String payload) {
+        return doAction(payload);
+    }
+
+    /**
+     * Consume the message from the "words-in" channel using reactive signature.
+     * 
+     * @param message
+     *            reactive message containing the payload
+     *
+     * @return a void completion stage
+     */
+    @Incoming("words-in")
+    @Blocking(ordered = false, value = "incoming-pool")
+    @Retry(maxRetries = 2)
+    public CompletionStage<Void> processReactive(Message<String> message) {
+        try {
+            String result = doAction(message.getPayload());
+            Log.infov("Processed message: {0}", result);
+            return message.ack();
+        } catch (Exception e) {
+            Log.error("Error during logging metadata", e);
+            return message.nack(e);
+        }
+    }
+
+    private String doAction(String payload) {
         Log.infov("Message received: [{0}]", payload);
         try {
             TimeUnit.MILLISECONDS.sleep(2000);

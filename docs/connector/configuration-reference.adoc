@@ -47,8 +47,14 @@ For example if you use `quarkus.redis.*my-redis*.hosts` configuration then you c
 | INCOMING
 
 | `xread-noack`
-| Include the `NOACK` parameter in the `XREADGROUP` call
+| Include the `NOACK` parameter in the `XREADGROUP` call.
 | `true`
+| No
+| INCOMING
+
+| `broadcast`
+| Allow the received entries to be consumed by multiple channels.
+| `false`
 | No
 | INCOMING
 

@@ -62,8 +62,10 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.reactive.messaging.annotations.ConnectorAttribute;
 import io.smallrye.reactive.messaging.connector.InboundConnector;
 import io.smallrye.reactive.messaging.connector.OutboundConnector;
+import io.smallrye.reactive.messaging.providers.connectors.ExecutionHolder;
 import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
 import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
+import io.vertx.mutiny.core.Vertx;
 
 /**
  * Microprofile Reactive Streams connector for Redis Streams integration.
@@ -88,6 +90,8 @@ import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
 @ConnectorAttribute(name = "xread-noack", description = "Include the NOACK parameter in the XREADGROUP call", type = "boolean",
         defaultValue = "true",
         direction = ConnectorAttribute.Direction.INCOMING)
+@ConnectorAttribute(name = "broadcast", description = "Allow the received entries to be consumed by multiple channels", type = "boolean", defaultValue = "false",
+        direction = ConnectorAttribute.Direction.INCOMING)
 @ConnectorAttribute(name = "xadd-maxlen", description = "The maximum number of entries to keep in the stream", type = "int",
         direction = ConnectorAttribute.Direction.OUTGOING)
 @ConnectorAttribute(name = "xadd-exact-maxlen", description = "Use exact trimming for MAXLEN parameter", type = "boolean", defaultValue = "false",
@@ -110,6 +114,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
 
     private final RedisStreamsProducer redisStreamsProducer;
     private String consumer;
+    private Vertx vertx;
     private volatile boolean consumerCancelled = false;
     private final ConcurrentHashMap<String, AtomicBoolean> prudentRunMap = new ConcurrentHashMap<>();
     private final List<Flow.Subscription> subscriptions = new CopyOnWriteArrayList<>();
@@ -117,6 +122,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     private final Set<String> underProcessing = ConcurrentHashMap.newKeySet();
     private final ReducableSemaphore shutdownPermit = new ReducableSemaphore(1);
     private final Integer gracefulShutdownTimeout;
+    private final ExecutionHolder executionHolder;
 
     /**
      * Constructs a RedisStreamsConnector with the specified CDI RedisStreamsProducer.
@@ -125,13 +131,17 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      *            the RedisStreamsProducer to be injected
      * @param gracefulShutdownTimeout
      *            graceful timeout config in ms (default {@literal 60_000})
+     * @param executionHolder
+     *           the reactive ExecutionHolder to be injected
      */
     @Inject
     public RedisStreamsConnector(RedisStreamsProducer redisStreamsProducer,
             @ConfigProperty(name = ConnectorFactory.CONNECTOR_PREFIX + REACTIVE_MESSAGING_REDIS_STREAMS_CONNECTOR + ".graceful-timeout-ms",
-                    defaultValue = "60000") Integer gracefulShutdownTimeout) {
+                    defaultValue = "60000") Integer gracefulShutdownTimeout,
+            ExecutionHolder executionHolder) {
         this.redisStreamsProducer = redisStreamsProducer;
         this.gracefulShutdownTimeout = gracefulShutdownTimeout;
+        this.executionHolder = executionHolder;
     }
 
     /**
@@ -140,6 +150,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     @PostConstruct
     public void init() {
         this.consumer = UUID.randomUUID().toString();
+        this.vertx = executionHolder.vertx();
     }
 
     /**
@@ -196,7 +207,11 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
 
         RedisStreams redisAPI = redisStreamsProducer.produce(incomingConfig.getConnectionKey());
         redisStreams.add(redisAPI);
-        return xreadMulti(redisAPI, incomingConfig);
+        Multi<Message<Object>> publisher = xreadMulti(redisAPI, incomingConfig);
+        if(Boolean.TRUE.equals(incomingConfig.getBroadcast())){
+            publisher = publisher.broadcast().toAllSubscribers();
+        }
+        return publisher;
     }
 
     /**
@@ -275,7 +290,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .invoke(() -> {
                     consumerCancelled = true;
                     log.tracev("Subscription for channel [{0}] has been cancelled", incomingConfig.getChannel());
-                });
+                })
+                // Ensure execution on Vert.x context in order to have context propagation
+                .emitOn(cmd -> vertx.getOrCreateContext().runOnContext(cmd));
     }
 
     /**

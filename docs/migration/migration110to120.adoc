@@ -3,6 +3,16 @@
 == reactive-messaging-redisstream-connector
 
 * RedisStreamsConnector#prudentRun handling fix, separate handling of the flag per config.
+* Consume messages on vert.x context to retain context data in all cases.
+* Added `broadcast` incoming configuration to allow multiple consumers on the same channel (ie. multiple methods with `@Incoming` for the same channel).
+
+=== Migration
+
+Changes are backwards compatible doesn't need any migration.
+
+== quarkus-reactive-messaging-redisstream-extension-sample
+
+* Added both imperative and reactive example for `@Incoming` usage.
 
 === Migration
 
