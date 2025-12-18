@@ -10,6 +10,7 @@
     <artifactId>bom</artifactId>
     <packaging>pom</packaging>
 
+    <name>${project.artifactId}</name>
     <modules>
         <module>bom-project</module>
         <module>bom-test</module>
