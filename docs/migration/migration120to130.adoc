@@ -1,0 +1,9 @@
+= 1.2.0 -> 1.3.0
+
+== reactive-messaging-redisstream-connector
+
+* Introduced additional config options for outgoing producers in order to fine-tune backpressure and handle fire-and-forget scenarios.
+
+=== Migration
+
+* The connector now defaults to 3 retries for outgoing messages. If you want to keep the previous behavior of no retries, you need to set `retries` to `0` in your configuration.
