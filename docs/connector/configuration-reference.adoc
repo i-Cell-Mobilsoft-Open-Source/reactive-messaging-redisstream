@@ -76,6 +76,36 @@ For example if you use `quarkus.redis.*my-redis*.hosts` configuration then you c
 | No
 | OUTGOING
 
+| `wait-for-write-completion`
+| Whether the Redis client waits for the XADD to respond before acknowledging the message.
+| `true`
+| No
+| OUTGOING
+
+| `max-inflight-messages`
+| The maximum number of messages to be written to the RedisStream concurrently. You can set this attribute to `0` remove the limit.
+| `1024`
+| No
+| OUTGOING
+
+| `retries`
+| The maximum number of retries for sending messages to the Redis stream. If the value is set to `0`, no retries will be performed. If set to negative number, it will retry indefinitely.
+| `3`
+| No
+| OUTGOING
+
+| `retry-initial-delay-ms`
+| The initial delay for the retry.
+| `1000`
+| No
+| OUTGOING
+
+| `retry-max-delay-ms`
+| The maximum delay for the retry.
+| `10000`
+| No
+| OUTGOING
+
 | `graceful-timeout-ms`
 | Milliseconds to wait for the consumed messages to finish processing before closing the consumer group.
 | `60000`
