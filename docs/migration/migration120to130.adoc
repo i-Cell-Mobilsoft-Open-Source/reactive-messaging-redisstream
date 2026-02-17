@@ -3,6 +3,9 @@
 == reactive-messaging-redisstream-connector
 
 * Introduced additional config options for outgoing producers in order to fine-tune backpressure and handle fire-and-forget scenarios.
+* Upgraded testcontainers to 1.21.4, and added api.version to failsafe and surefire configurations, the configurations shall be reverted once quarkus will get upgraded to 3.27.2+ More info:
+** https://github.com/testcontainers/testcontainers-java/issues/11212
+** https://github.com/quarkusio/quarkus/issues/51002
 
 === Migration
 
