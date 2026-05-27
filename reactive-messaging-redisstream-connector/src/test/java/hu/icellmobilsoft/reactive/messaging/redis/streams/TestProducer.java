@@ -25,6 +25,7 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
 
+import hu.icellmobilsoft.reactive.messaging.redis.streams.dto.TestDto;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.RedisStreamMetadata;
 import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
 
@@ -53,6 +54,20 @@ public class TestProducer {
     Emitter<String> emitterWithMetadata;
 
     /**
+     * The DTO Emitter.
+     */
+    @Inject
+    @Channel("out-dto")
+    Emitter<TestDto> dtoEmitter;
+
+    /**
+     * The reactive DTO Emitter.
+     */
+    @Inject
+    @Channel("out-dto-reactive")
+    Emitter<TestDto> dtoReactiveEmitter;
+
+    /**
      * Produce simple message.
      *
      * @param message
@@ -74,5 +89,25 @@ public class TestProducer {
         emitterWithMetadata.send(
                 ContextAwareMessage.of(message)
                         .addMetadata(new RedisStreamMetadata().withAdditionalField(ADDITIONAL_FIELD_KEY, additionalField)));
+    }
+
+    /**
+     * Produce DTO message.
+     *
+     * @param dto
+     *            the DTO to send
+     */
+    public void produceDto(final TestDto dto) {
+        dtoEmitter.send(dto);
+    }
+
+    /**
+     * Produce DTO message through the reactive channel.
+     *
+     * @param dto
+     *            the DTO to send
+     */
+    public void produceReactiveDto(final TestDto dto) {
+        dtoReactiveEmitter.send(dto);
     }
 }

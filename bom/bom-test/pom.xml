@@ -82,6 +82,14 @@
                 <version>2.6.2</version>
                 <scope>test</scope>
             </dependency>
+
+            <!--  yasson -->
+            <dependency>
+                <groupId>org.eclipse</groupId>
+                <artifactId>yasson</artifactId>
+                <version>3.0.4</version>
+                <scope>test</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

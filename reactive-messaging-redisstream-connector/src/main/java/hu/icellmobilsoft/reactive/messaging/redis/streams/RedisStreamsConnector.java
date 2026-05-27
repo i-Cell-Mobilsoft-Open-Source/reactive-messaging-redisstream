@@ -55,6 +55,7 @@ import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreamsProducer;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.StreamEntry;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.concurrent.ReducableSemaphore;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.converter.RedisStreamJsonbSerializer;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.IncomingRedisStreamMetadata;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.RedisStreamMetadata;
 import io.smallrye.mutiny.Multi;
@@ -131,6 +132,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     private final Logger log = Logger.getLogger(RedisStreamsConnector.class);
 
     private final RedisStreamsProducer redisStreamsProducer;
+    private final RedisStreamJsonbSerializer jsonbSerializer;
     private String consumer;
     private Vertx vertx;
     private volatile boolean consumerCancelled = false;
@@ -147,6 +149,8 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      *
      * @param redisStreamsProducer
      *            the RedisStreamsProducer to be injected
+     * @param jsonbSerializer
+     *            the JSON-B serializer for outgoing DTO payloads
      * @param gracefulShutdownTimeout
      *            graceful timeout config in ms (default {@literal 60_000})
      * @param executionHolder
@@ -154,10 +158,12 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      */
     @Inject
     public RedisStreamsConnector(RedisStreamsProducer redisStreamsProducer,
+            RedisStreamJsonbSerializer jsonbSerializer,
             @ConfigProperty(name = ConnectorFactory.CONNECTOR_PREFIX + REACTIVE_MESSAGING_REDIS_STREAMS_CONNECTOR + ".graceful-timeout-ms",
                     defaultValue = "60000") Integer gracefulShutdownTimeout,
             ExecutionHolder executionHolder) {
         this.redisStreamsProducer = redisStreamsProducer;
+        this.jsonbSerializer = jsonbSerializer;
         this.gracefulShutdownTimeout = gracefulShutdownTimeout;
         this.executionHolder = executionHolder;
     }
@@ -226,7 +232,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         RedisStreams redisAPI = redisStreamsProducer.produce(incomingConfig.getConnectionKey());
         redisStreams.add(redisAPI);
         Multi<Message<Object>> publisher = xreadMulti(redisAPI, incomingConfig);
-        if(Boolean.TRUE.equals(incomingConfig.getBroadcast())){
+        if (Boolean.TRUE.equals(incomingConfig.getBroadcast())) {
             publisher = publisher.broadcast().toAllSubscribers();
         }
         return publisher;
@@ -619,7 +625,8 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     protected Map<String, String> createRedisMessageFields(Message<?> message, RedisStreamsConnectorOutgoingConfiguration outgoingConfig,
             String fieldTtl) {
         Map<String, String> streamEntryFields = new HashMap<>();
-        streamEntryFields.put(outgoingConfig.getPayloadField(), message.getPayload().toString());
+        String serializedPayload = jsonbSerializer.serialize(message.getPayload());
+        streamEntryFields.put(outgoingConfig.getPayloadField(), serializedPayload);
         if (fieldTtl != null) {
             streamEntryFields.put("ttl", fieldTtl);
         }
