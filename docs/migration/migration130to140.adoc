@@ -9,4 +9,4 @@
 
 === Migration
 
-Changes are backwards compatible and don't need any migration.
+No code changes are required, but you may need to add a dependency on a JSON-B implementation if you don't already have one.
