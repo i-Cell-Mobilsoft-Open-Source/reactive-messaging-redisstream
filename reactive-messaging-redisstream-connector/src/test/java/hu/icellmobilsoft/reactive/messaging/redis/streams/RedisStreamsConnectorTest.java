@@ -251,7 +251,7 @@ public class RedisStreamsConnectorTest {
         // then the consumer should receive the deserialized DTO
         ConditionFactory await = Awaitility.await();
         await.atMost(2, TimeUnit.SECONDS).until(() -> !testConsumer.getDtoMessages().isEmpty());
-        Assertions.assertEquals(expected, testConsumer.getDtoMessages().getFirst());
+        Assertions.assertEquals(expected, testConsumer.getDtoMessages().get(0));
     }
 
     /**
@@ -267,7 +267,7 @@ public class RedisStreamsConnectorTest {
         // then the reactive consumer should receive and deserialize the DTO
         ConditionFactory await = Awaitility.await();
         await.atMost(2, TimeUnit.SECONDS).until(() -> !testConsumer.getReactiveDtoMessages().isEmpty());
-        Assertions.assertEquals(expected, testConsumer.getReactiveDtoMessages().getFirst());
+        Assertions.assertEquals(expected, testConsumer.getReactiveDtoMessages().get(0));
     }
 
     private RedisClient connectToRedisContainer() {
