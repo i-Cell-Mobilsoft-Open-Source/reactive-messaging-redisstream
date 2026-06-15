@@ -30,6 +30,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.eclipse.microprofile.reactive.messaging.Message;
 
+import hu.icellmobilsoft.reactive.messaging.redis.streams.dto.TestDto;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.metadata.IncomingRedisStreamMetadata;
 import io.smallrye.mutiny.Uni;
 
@@ -43,6 +44,8 @@ import io.smallrye.mutiny.Uni;
 public class TestConsumer {
     private final List<String> messages = Collections.synchronizedList(new ArrayList<>());
     private final List<MessageWithMetadata> metadataMessages = Collections.synchronizedList(new ArrayList<>());
+    private final List<TestDto> dtoMessages = Collections.synchronizedList(new ArrayList<>());
+    private final List<TestDto> reactiveDtoMessages = Collections.synchronizedList(new ArrayList<>());
 
     public List<String> getMessages() {
         return messages;
@@ -52,9 +55,27 @@ public class TestConsumer {
         return metadataMessages;
     }
 
+    public List<TestDto> getDtoMessages() {
+        return dtoMessages;
+    }
+
+    public List<TestDto> getReactiveDtoMessages() {
+        return reactiveDtoMessages;
+    }
+
     @Incoming("in")
     public void consume(final String message) {
         messages.add(message);
+    }
+
+    @Incoming("in-dto")
+    public void consumeDto(final TestDto dto) {
+        dtoMessages.add(dto);
+    }
+
+    @Incoming("in-dto-reactive")
+    public Uni<Void> consumeReactiveDto(final Message<TestDto> message) {
+        return Uni.createFrom().item(message).invoke(m -> reactiveDtoMessages.add(m.getPayload())).invoke(Message::ack).replaceWithVoid();
     }
 
     @Incoming("in-reactive")

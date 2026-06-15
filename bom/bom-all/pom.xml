@@ -49,6 +49,14 @@
                 <version>3.1</version>
             </dependency>
 
+            <!-- Jakarta JSON-B API -->
+            <dependency>
+                <groupId>jakarta.json.bind</groupId>
+                <artifactId>jakarta.json.bind-api</artifactId>
+                <version>3.0.1</version>
+                <scope>provided</scope>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 </project>

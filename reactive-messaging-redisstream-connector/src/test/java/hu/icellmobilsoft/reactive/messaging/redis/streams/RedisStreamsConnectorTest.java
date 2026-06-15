@@ -29,6 +29,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import jakarta.inject.Inject;
+
 import org.jboss.logging.JBossLogManagerProvider;
 import org.jboss.weld.junit5.EnableWeld;
 import org.jboss.weld.junit5.WeldInitiator;
@@ -47,6 +49,9 @@ import org.testcontainers.shaded.org.awaitility.core.ConditionFactory;
 
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.TestLettuceRedisStreams;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.TestLettuceRedisStreamsProducer;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.converter.RedisStreamJsonbMessageConverter;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.converter.RedisStreamJsonbSerializer;
+import hu.icellmobilsoft.reactive.messaging.redis.streams.dto.TestDto;
 import io.lettuce.core.Consumer;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisFuture;
@@ -55,8 +60,6 @@ import io.lettuce.core.StreamMessage;
 import io.lettuce.core.XReadArgs;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.models.stream.PendingMessages;
-
-import jakarta.inject.Inject;
 
 /**
  * Test class for {@link RedisStreamsConnector}
@@ -91,6 +94,8 @@ public class RedisStreamsConnectorTest {
                                 .addBeanClass(TestLettuceRedisStreams.class)
                                 .addBeanClass(TestLettuceRedisStreamsProducer.class)
                                 .addBeanClass(RedisStreamsConnector.class)
+                                .addBeanClass(RedisStreamJsonbMessageConverter.class)
+                                .addBeanClass(RedisStreamJsonbSerializer.class)
                                 .addBeanClass(JBossLogManagerProvider.class)
                                 // beans.xml scan
                                 .enableDiscovery())
@@ -231,6 +236,38 @@ public class RedisStreamsConnectorTest {
         } catch (ExecutionException | TimeoutException | InterruptedException e) {
             fail("Error occurred during producer with metadata test", e);
         }
+    }
+
+    /**
+     * Test DTO round-trip — TestDto is serialized to JSON by the producer, written to Redis Stream, then consumed and deserialized back to TestDto by
+     * the consumer.
+     */
+    @Test
+    void testDtoRoundTrip() {
+        // given
+        TestDto expected = new TestDto("round-trip", 42);
+        // when producing a DTO
+        testProducer.produceDto(expected);
+        // then the consumer should receive the deserialized DTO
+        ConditionFactory await = Awaitility.await();
+        await.atMost(2, TimeUnit.SECONDS).until(() -> !testConsumer.getDtoMessages().isEmpty());
+        Assertions.assertEquals(expected, testConsumer.getDtoMessages().get(0));
+    }
+
+    /**
+     * Test reactive DTO round-trip — TestDto is serialized by the producer, consumed via a reactive {@code Uni<Void>} method with
+     * {@code Message<TestDto>} parameter. Verifies that the JSON-B converter works with reactive stream pipelines.
+     */
+    @Test
+    void testReactiveDtoRoundTrip() {
+        // given
+        TestDto expected = new TestDto("reactive-round-trip", 99);
+        // when producing a DTO through the reactive channel
+        testProducer.produceReactiveDto(expected);
+        // then the reactive consumer should receive and deserialize the DTO
+        ConditionFactory await = Awaitility.await();
+        await.atMost(2, TimeUnit.SECONDS).until(() -> !testConsumer.getReactiveDtoMessages().isEmpty());
+        Assertions.assertEquals(expected, testConsumer.getReactiveDtoMessages().get(0));
     }
 
     private RedisClient connectToRedisContainer() {

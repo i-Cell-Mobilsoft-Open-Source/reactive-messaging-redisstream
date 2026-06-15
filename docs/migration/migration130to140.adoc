@@ -1,0 +1,12 @@
+= 1.3.0 -> 1.4.0
+
+== reactive-messaging-redisstream-connector
+
+* JSON-B based serialization/deserialization ability to deal with non-string messages.
+** `RedisStreamJsonbMessageConverter` — automatically deserializes incoming JSON string payloads to the `@Incoming` method's parameter type.
+** `RedisStreamJsonbSerializer` — automatically serializes non-`String` payloads to JSON when using `Emitter<T>` on outgoing channels.
+** Custom `Jsonb` instance can be provided via a CDI producer; the default is `JsonbBuilder.create()`.
+
+=== Migration
+
+No code changes are required, but you may need to add a dependency on a JSON-B implementation if you don't already have one.
