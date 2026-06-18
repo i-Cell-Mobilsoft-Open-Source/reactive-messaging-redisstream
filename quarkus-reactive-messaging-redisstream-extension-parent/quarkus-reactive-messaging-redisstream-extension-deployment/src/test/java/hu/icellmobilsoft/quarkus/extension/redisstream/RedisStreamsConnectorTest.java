@@ -187,14 +187,16 @@ class RedisStreamsConnectorTest {
         List<String> messages = List.of("batch-1", "batch-2", "batch-3");
 
         ReactiveStreamCommands<String, String, String> streamCommand = redisDataSource.stream(String.class);
-        Uni<List<StreamMessage<String, String, String>>> readResult = streamCommand
-                .xread(streamKey, ZERO_OFFSET, new XReadArgs().count(messages.size()).block(Duration.ofSeconds(1)));
-
         testProducer.produceBatchList(messages);
 
-        List<StreamMessage<String, String, String>> streamMessages = readResult.await().atMost(Duration.ofSeconds(2));
-        assertThat(streamMessages).hasSize(messages.size());
-        assertThat(streamMessages).extracting(sm -> sm.payload().get(DEFAULT_MESSAGE_KEY)).containsExactlyElementsOf(messages);
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+            List<StreamMessage<String, String, String>> streamMessages = streamCommand
+                    .xread(streamKey, ZERO_OFFSET, new XReadArgs().count(messages.size()))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+            assertThat(streamMessages).hasSize(messages.size());
+            assertThat(streamMessages).extracting(sm -> sm.payload().get(DEFAULT_MESSAGE_KEY)).containsExactlyElementsOf(messages);
+        });
     }
 
     @Test
@@ -203,14 +205,16 @@ class RedisStreamsConnectorTest {
         List<String> messages = List.of("stream-1", "stream-2");
 
         ReactiveStreamCommands<String, String, String> streamCommand = redisDataSource.stream(String.class);
-        Uni<List<StreamMessage<String, String, String>>> readResult = streamCommand
-                .xread(streamKey, ZERO_OFFSET, new XReadArgs().count(messages.size()).block(Duration.ofSeconds(1)));
-
         testProducer.produceBatchStream(messages.stream());
 
-        List<StreamMessage<String, String, String>> streamMessages = readResult.await().atMost(Duration.ofSeconds(2));
-        assertThat(streamMessages).hasSize(messages.size());
-        assertThat(streamMessages).extracting(sm -> sm.payload().get(DEFAULT_MESSAGE_KEY)).containsExactlyElementsOf(messages);
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+            List<StreamMessage<String, String, String>> streamMessages = streamCommand
+                    .xread(streamKey, ZERO_OFFSET, new XReadArgs().count(messages.size()))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+            assertThat(streamMessages).hasSize(messages.size());
+            assertThat(streamMessages).extracting(sm -> sm.payload().get(DEFAULT_MESSAGE_KEY)).containsExactlyElementsOf(messages);
+        });
     }
 
     private void assertThatMessageIsAckedOnRedis(String messageId, ReactiveStreamCommands<String, String, String> streamCommand,
