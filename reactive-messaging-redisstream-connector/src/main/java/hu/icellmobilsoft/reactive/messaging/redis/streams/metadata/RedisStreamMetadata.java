@@ -32,6 +32,7 @@ public class RedisStreamMetadata {
 
     private final Map<String, String> additionalFields = new HashMap<>();
     private String flowIdExtension;
+    private boolean pipelined;
 
     /**
      * Default constructor
@@ -92,5 +93,28 @@ public class RedisStreamMetadata {
      */
     public void setFlowIdExtension(String flowIdExtension) {
         this.flowIdExtension = flowIdExtension;
+    }
+
+    /**
+     * Whether the payload should be split into multiple Redis stream entries and sent in a pipeline.
+     *
+     * @return {@code true} when pipelined sending is enabled
+     * @since 1.4.0
+     */
+    public boolean isPipelined() {
+        return pipelined;
+    }
+
+    /**
+     * Enables pipelined Redis writes for batch-like payloads ({@link Iterable}, {@link java.util.stream.Stream}, object arrays).
+     *
+     * @param pipelined
+     *            whether pipelined sending should be enabled
+     * @return actual object
+     * @since 1.4.0
+     */
+    public RedisStreamMetadata withPipelined(boolean pipelined) {
+        this.pipelined = pipelined;
+        return this;
     }
 }

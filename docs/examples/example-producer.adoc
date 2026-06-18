@@ -107,3 +107,23 @@ The resulting message will be like:
               5) "ttl"
               6) "1739262594638"
 ----
+
+=== Pipelined batch producer
+.Emitter based producer with a batch payload
+[source,java]
+----
+    @Inject
+    @Channel("out-channel")
+    Emitter<List<String>> batchEmitter;
+
+
+    public void produceBatch() {
+        batchEmitter.send(
+               ContextAwareMessage.of(List.of("Hello", "from", "pipeline"))
+                       .addMetadata(new RedisStreamMetadata()
+                           .withPipelined(true))
+        );
+    }
+----
+
+When `withPipelined(true)` is enabled, `Iterable`, `Stream` and object-array payloads are split into separate `XADD` commands and written to Redis using the implementation specific pipeline/batch support. Without this metadata, the payload is still sent as a single message, so existing `List`/JSON payload behavior remains unchanged.

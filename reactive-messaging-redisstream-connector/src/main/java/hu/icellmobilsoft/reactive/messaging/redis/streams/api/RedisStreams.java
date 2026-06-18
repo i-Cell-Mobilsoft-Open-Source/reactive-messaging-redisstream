@@ -19,10 +19,10 @@
  */
 package hu.icellmobilsoft.reactive.messaging.redis.streams.api;
 
-import io.smallrye.mutiny.Uni;
-
 import java.util.List;
 import java.util.Map;
+
+import io.smallrye.mutiny.Uni;
 
 /**
  * Interface for interacting with Redis Streams.
@@ -105,6 +105,22 @@ public interface RedisStreams {
      * @see <a href="https://redis.io/docs/latest/commands/xadd">XADD</a>
      */
     Uni<String> xAdd(String stream, String id, Integer maxLen, Boolean exact, String minId, Map<String, String> fields);
+
+    /**
+     * Adds multiple messages to redis streams using the implementation specific batching/pipelining strategy.
+     *
+     * @param entries
+     *            stream entries to add
+     * @param maxLen
+     *            the maximum length of the stream, it takes precedence over {@code minId}
+     * @param exact
+     *            whether the maximum length should be exact or near exact
+     * @param minId
+     *            the minimum ID of entries allowed in stream
+     * @return a Uni containing the IDs of the added messages
+     * @since 1.4.0
+     */
+    Uni<List<String>> xAdd(List<StreamEntry> entries, Integer maxLen, Boolean exact, String minId);
 
     /**
      * Reads messages from the specified stream and group.

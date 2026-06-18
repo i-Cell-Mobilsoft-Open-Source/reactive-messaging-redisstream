@@ -6,7 +6,11 @@
 ** `RedisStreamJsonbMessageConverter` — automatically deserializes incoming JSON string payloads to the `@Incoming` method's parameter type.
 ** `RedisStreamJsonbSerializer` — automatically serializes non-`String` payloads to JSON when using `Emitter<T>` on outgoing channels.
 ** Custom `Jsonb` instance can be provided via a CDI producer; the default is `JsonbBuilder.create()`.
+* New pipelined batch write support for outgoing channels.
+** When `RedisStreamMetadata.withPipelined(true)` is set, `Iterable`, `Stream` and object-array payloads are split into multiple Redis stream entries and sent with implementation-specific batch/pipeline support.
+** Without this metadata flag, batch-like payloads keep the previous behavior and are sent as a single serialized payload.
 
 === Migration
 
-No code changes are required, but you may need to add a dependency on a JSON-B implementation if you don't already have one.
+You may need to add a dependency on a JSON-B implementation if you don't already have one.
+If you extend `RedisStreamsConnector` and override its protected `xAdd(...)` method, note that its return type changed from `Uni<String>` to `Uni<List<String>>` to support pipelined batch writes. Custom subclasses overriding that method must be updated accordingly.

@@ -53,6 +53,7 @@ import hu.icellmobilsoft.reactive.messaging.redis.streams.converter.RedisStreamJ
 import hu.icellmobilsoft.reactive.messaging.redis.streams.converter.RedisStreamJsonbSerializer;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.dto.TestDto;
 import io.lettuce.core.Consumer;
+import io.lettuce.core.Range;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisFuture;
 import io.lettuce.core.RedisURI;
@@ -268,6 +269,52 @@ public class RedisStreamsConnectorTest {
         ConditionFactory await = Awaitility.await();
         await.atMost(2, TimeUnit.SECONDS).until(() -> !testConsumer.getReactiveDtoMessages().isEmpty());
         Assertions.assertEquals(expected, testConsumer.getReactiveDtoMessages().get(0));
+    }
+
+    @Test
+    void testProducerBatchList() {
+        String streamKey = "out-batch-list-stream";
+        List<String> messages = List.of("batch-1", "batch-2", "batch-3");
+        try (RedisClient redisClient = connectToRedisContainer()) {
+            testProducer.produceBatchList(messages);
+
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+                List<StreamMessage<String, String>> streamMessages = redisClient.connect()
+                        .sync()
+                        .xrange(streamKey, Range.create("-", "+"));
+
+                assertThat(streamMessages).hasSize(messages.size());
+
+                assertThat(streamMessages)
+                        .extracting(sm -> sm.getBody().get(DEFAULT_MESSAGE_KEY))
+                        .containsExactlyElementsOf(messages);
+            });
+        } catch (Exception e) {
+            fail("Error occurred during batch list producer test", e);
+        }
+    }
+
+    @Test
+    void testProducerBatchStream() {
+        String streamKey = "out-batch-stream";
+        List<String> messages = List.of("stream-1", "stream-2");
+        try (RedisClient redisClient = connectToRedisContainer()) {
+            testProducer.produceBatchStream(messages.stream());
+
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+                List<StreamMessage<String, String>> streamMessages = redisClient.connect()
+                        .sync()
+                        .xrange(streamKey, Range.create("-", "+"));
+
+                assertThat(streamMessages).hasSize(messages.size());
+
+                assertThat(streamMessages)
+                        .extracting(sm -> sm.getBody().get(DEFAULT_MESSAGE_KEY))
+                        .containsExactlyElementsOf(messages);
+            });
+        } catch (Exception e) {
+            fail("Error occurred during batch list producer test", e);
+        }
     }
 
     private RedisClient connectToRedisContainer() {

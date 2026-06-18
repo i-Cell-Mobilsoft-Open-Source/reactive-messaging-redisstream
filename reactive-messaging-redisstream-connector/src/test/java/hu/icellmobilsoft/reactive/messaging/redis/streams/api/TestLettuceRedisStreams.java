@@ -22,12 +22,14 @@ package hu.icellmobilsoft.reactive.messaging.redis.streams.api;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.StreamSupport;
 
 import io.lettuce.core.ClientOptions;
 import io.lettuce.core.Consumer;
 import io.lettuce.core.RedisClient;
+import io.lettuce.core.RedisFuture;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.TimeoutOptions;
 import io.lettuce.core.XAddArgs;
@@ -107,17 +109,40 @@ public class TestLettuceRedisStreams implements RedisStreams {
 
     @Override
     public Uni<String> xAdd(String stream, String id, Integer maxLen, Boolean exact, String minId, Map<String, String> fields) {
-        XAddArgs args;
-        if (maxLen != null) {
-            args = XAddArgs.Builder.maxlen(maxLen).exactTrimming(exact);
-        } else if (minId != null) {
-            args = XAddArgs.Builder.minId(minId);
-        } else {
-            args = new XAddArgs();
-        }
-        Mono<String> xadd = connection.reactive().xadd(stream, args.id(id), fields);
+        Mono<String> xadd = connection.reactive().xadd(stream, createXAddArgs(id, maxLen, exact, minId), fields);
         return UniReactorConverters.<String> fromMono().from(xadd);
 
+    }
+
+    @Override
+    public Uni<List<String>> xAdd(List<StreamEntry> entries, Integer maxLen, Boolean exact, String minId) {
+        if (entries == null || entries.isEmpty()) {
+            return Uni.createFrom().item(List.of());
+        }
+        StatefulRedisConnection<String, String> batchConnection = redisClient.connect();
+        try {
+            batchConnection.setAutoFlushCommands(false);
+            List<RedisFuture<String>> futures = entries.stream()
+                    .map(entry -> batchConnection.async().xadd(
+                            entry.stream(),
+                            createXAddArgs(Optional.ofNullable(entry.id()).orElse("*"), maxLen, exact, minId),
+                            Optional.ofNullable(entry.fields()).orElse(Map.of())))
+                    .toList();
+            batchConnection.flushCommands();
+            CompletableFuture<List<String>> all = CompletableFuture
+                    .allOf(futures.stream().map(RedisFuture::toCompletableFuture).toArray(CompletableFuture[]::new))
+                    .thenApply(ignored -> futures.stream()
+                            .map(future -> future.toCompletableFuture().join())
+                            .toList());
+            return Uni.createFrom().completionStage(all).eventually(batchConnection::close);
+        } catch (RuntimeException e) {
+            batchConnection.close();
+            return Uni.createFrom().failure(e);
+        } finally {
+            if (batchConnection.isOpen()) {
+                batchConnection.setAutoFlushCommands(true);
+            }
+        }
     }
 
     @Override
@@ -131,5 +156,17 @@ public class TestLettuceRedisStreams implements RedisStreams {
                 .map(sm -> new StreamEntry(stream, sm.getId(), sm.getBody()))
                 .collectList();
         return UniReactorConverters.<List<StreamEntry>> fromMono().from(listMono);
+    }
+
+    private XAddArgs createXAddArgs(String id, Integer maxLen, Boolean exact, String minId) {
+        XAddArgs args;
+        if (maxLen != null) {
+            args = XAddArgs.Builder.maxlen(maxLen).exactTrimming(exact);
+        } else if (minId != null) {
+            args = XAddArgs.Builder.minId(minId);
+        } else {
+            args = new XAddArgs();
+        }
+        return args.id(id);
     }
 }

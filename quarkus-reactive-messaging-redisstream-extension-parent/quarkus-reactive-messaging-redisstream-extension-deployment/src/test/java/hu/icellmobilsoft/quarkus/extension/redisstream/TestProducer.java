@@ -19,6 +19,9 @@
  */
 package hu.icellmobilsoft.quarkus.extension.redisstream;
 
+import java.util.List;
+import java.util.stream.Stream;
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -52,6 +55,14 @@ public class TestProducer {
     @Channel("out-with-metadata")
     Emitter<String> emitterWithMetadata;
 
+    @Inject
+    @Channel("out-batch-list")
+    Emitter<List<String>> batchListEmitter;
+
+    @Inject
+    @Channel("out-batch-stream")
+    Emitter<Stream<String>> batchStreamEmitter;
+
     /**
      * Produce simple message.
      *
@@ -74,5 +85,17 @@ public class TestProducer {
         emitterWithMetadata.send(
                 ContextAwareMessage.of(message)
                         .addMetadata(new RedisStreamMetadata().withAdditionalField(ADDITIONAL_FIELD_KEY, additionalField)));
+    }
+
+    public void produceBatchList(final List<String> messages) {
+        batchListEmitter.send(
+                ContextAwareMessage.of(messages)
+                        .addMetadata(new RedisStreamMetadata().withPipelined(true)));
+    }
+
+    public void produceBatchStream(final Stream<String> messages) {
+        batchStreamEmitter.send(
+                ContextAwareMessage.of(messages)
+                        .addMetadata(new RedisStreamMetadata().withPipelined(true)));
     }
 }

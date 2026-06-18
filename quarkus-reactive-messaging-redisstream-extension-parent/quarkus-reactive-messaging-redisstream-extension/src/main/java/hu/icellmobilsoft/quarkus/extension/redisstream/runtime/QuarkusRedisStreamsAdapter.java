@@ -24,13 +24,17 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.StreamSupport;
 
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreams;
 import hu.icellmobilsoft.reactive.messaging.redis.streams.api.StreamEntry;
 import io.quarkus.logging.Log;
 import io.smallrye.mutiny.Uni;
+import io.vertx.mutiny.redis.client.Command;
+import io.vertx.mutiny.redis.client.Redis;
 import io.vertx.mutiny.redis.client.RedisAPI;
+import io.vertx.mutiny.redis.client.Request;
 import io.vertx.mutiny.redis.client.Response;
 
 /**
@@ -44,6 +48,7 @@ import io.vertx.mutiny.redis.client.Response;
  */
 public class QuarkusRedisStreamsAdapter implements RedisStreams {
 
+    private final Redis redis;
     private final RedisAPI redisAPI;
 
     /**
@@ -52,7 +57,8 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
      * @param redisAPI
      *            the RedisAPI instance to use for Redis operations
      */
-    public QuarkusRedisStreamsAdapter(RedisAPI redisAPI) {
+    public QuarkusRedisStreamsAdapter(Redis redis, RedisAPI redisAPI) {
+        this.redis = redis;
         this.redisAPI = redisAPI;
     }
 
@@ -98,30 +104,29 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
 
     @Override
     public Uni<String> xAdd(String stream, String id, Integer maxLen, Boolean exact, String minId, Map<String, String> fields) {
-        List<String> xAddArgs = new ArrayList<>();
-        xAddArgs.add(stream);
-
-        if (maxLen != null) {
-            xAddArgs.add("MAXLEN");
-            if (!Boolean.TRUE.equals(exact)) {
-                xAddArgs.add("~");
-            }
-            xAddArgs.add(maxLen.toString());
-        } else if (minId != null) {
-            xAddArgs.add("MINID");
-            if (!Boolean.TRUE.equals(exact)) {
-                xAddArgs.add("~");
-            }
-            xAddArgs.add(minId);
-        }
-
-        xAddArgs.add(id);
-        fields.forEach((key, value) -> {
-            xAddArgs.add(key);
-            xAddArgs.add(value);
-        });
+        List<String> xAddArgs = createXAddArgs(stream, id, maxLen, exact, minId, fields);
         Log.tracev("Calling redis command XADD with args:[{0}]", xAddArgs);
         return redisAPI.xadd(xAddArgs).map(Response::toString);
+    }
+
+    @Override
+    public Uni<List<String>> xAdd(List<StreamEntry> entries, Integer maxLen, Boolean exact, String minId) {
+        if (entries == null || entries.isEmpty()) {
+            return Uni.createFrom().item(List.of());
+        }
+        List<Request> requests = entries.stream()
+                .map(entry -> createXAddRequest(
+                        entry.stream(),
+                        Optional.ofNullable(entry.id()).orElse("*"),
+                        maxLen,
+                        exact,
+                        minId,
+                        Optional.ofNullable(entry.fields()).orElse(Map.of())))
+                .toList();
+        return redis.batch(requests)
+                .onSubscription()
+                .invoke(() -> Log.tracev("Calling redis pipeline with [{0}] XADD request(s)", requests.size()))
+                .map(responses -> responses.stream().map(Response::toString).toList());
     }
 
     @Override
@@ -188,6 +193,38 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
             }
         }
         return new StreamEntry(streamKey, entryId, fields);
+    }
+
+    private Request createXAddRequest(String stream, String id, Integer maxLen, Boolean exact, String minId, Map<String, String> fields) {
+        Request request = Request.cmd(Command.XADD);
+        createXAddArgs(stream, id, maxLen, exact, minId, fields).forEach(request::arg);
+        return request;
+    }
+
+    private List<String> createXAddArgs(String stream, String id, Integer maxLen, Boolean exact, String minId, Map<String, String> fields) {
+        List<String> xAddArgs = new ArrayList<>();
+        xAddArgs.add(stream);
+
+        if (maxLen != null) {
+            xAddArgs.add("MAXLEN");
+            if (!Boolean.TRUE.equals(exact)) {
+                xAddArgs.add("~");
+            }
+            xAddArgs.add(maxLen.toString());
+        } else if (minId != null) {
+            xAddArgs.add("MINID");
+            if (!Boolean.TRUE.equals(exact)) {
+                xAddArgs.add("~");
+            }
+            xAddArgs.add(minId);
+        }
+
+        xAddArgs.add(id);
+        fields.forEach((key, value) -> {
+            xAddArgs.add(key);
+            xAddArgs.add(value);
+        });
+        return xAddArgs;
     }
 
     @Override

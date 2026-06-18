@@ -22,6 +22,7 @@ package hu.icellmobilsoft.reactive.messaging.redis.streams;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +36,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Priority;
@@ -95,7 +98,8 @@ import io.vertx.mutiny.core.Vertx;
 @ConnectorAttribute(name = "xread-noack", description = "Include the NOACK parameter in the XREADGROUP call", type = "boolean",
         defaultValue = "true",
         direction = ConnectorAttribute.Direction.INCOMING)
-@ConnectorAttribute(name = "broadcast", description = "Allow the received entries to be consumed by multiple channels", type = "boolean", defaultValue = "false",
+@ConnectorAttribute(name = "broadcast", description = "Allow the received entries to be consumed by multiple channels", type = "boolean",
+        defaultValue = "false",
         direction = ConnectorAttribute.Direction.INCOMING)
 // Redis specific outgoing connector attributes
 @ConnectorAttribute(name = "xadd-maxlen", description = "The maximum number of entries to keep in the stream", type = "int",
@@ -154,7 +158,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      * @param gracefulShutdownTimeout
      *            graceful timeout config in ms (default {@literal 60_000})
      * @param executionHolder
-     *           the reactive ExecutionHolder to be injected
+     *            the reactive ExecutionHolder to be injected
      */
     @Inject
     public RedisStreamsConnector(RedisStreamsProducer redisStreamsProducer,
@@ -560,9 +564,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      *            the RedisStreams instance used to interact with the Redis stream
      * @param message
      *            Raw message data to be converted to redis stream message. Contains the actual payload and metadata records.
-     * @return Uni containing the result of {@link RedisStreams#xAdd(String, String, Integer, Boolean, String, Map)}, the ID of the added message
+     * @return Uni containing the ID of the added message, or IDs when pipelined batch sending is used
      */
-    protected Uni<String> xAdd(RedisStreams redisAPI, RedisStreamsConnectorOutgoingConfiguration outgoingConfig, Optional<Long> ttlMsOpt,
+    protected Uni<List<String>> xAdd(RedisStreams redisAPI, RedisStreamsConnectorOutgoingConfiguration outgoingConfig, Optional<Long> ttlMsOpt,
             Message<?> message) {
         log.tracev("Sending message payload:[{0}] to redis stream:[{1}]", message.getPayload(), outgoingConfig.getStreamKey());
         String minId = null;
@@ -575,40 +579,66 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             // last not expired id (now - ttl)
             minId = String.valueOf(epochMilli - ttlMs);
         }
+        Optional<RedisStreamMetadata> redisStreamMetadata = getRedisStreamMetadata(message);
+        Optional<List<StreamEntry>> pipelinedEntries = createPipelinedEntries(message, redisStreamMetadata, outgoingConfig, fieldTtl);
+        if (pipelinedEntries.isPresent()) {
+            return sendPipelinedEntries(redisAPI, outgoingConfig, message, minId, pipelinedEntries.get());
+        }
+        return sendPlainPayload(redisAPI, outgoingConfig, message, minId, fieldTtl);
+    }
+
+    private Uni<List<String>> sendPipelinedEntries(RedisStreams redisAPI, RedisStreamsConnectorOutgoingConfiguration outgoingConfig,
+            Message<?> message, String minId, List<StreamEntry> entries) {
+        if (entries.isEmpty()) {
+            return Uni.createFrom().item(List.of());
+        }
+        Uni<List<String>> xaddUni = redisAPI.xAdd(
+                entries,
+                outgoingConfig.getXaddMaxlen().orElse(null),
+                outgoingConfig.getXaddExactMaxlen(),
+                minId)
+                .onItem()
+                .invoke(
+                        ids -> log.tracev(
+                                "Sent [{0}] pipelined message(s) to redis stream:[{1}]",
+                                ids.size(),
+                                outgoingConfig.getStreamKey()));
+        return retryOutgoingSend(logPipelinedSendFailure(xaddUni, outgoingConfig, message), outgoingConfig);
+    }
+
+    private Uni<List<String>> sendPlainPayload(RedisStreams redisAPI, RedisStreamsConnectorOutgoingConfiguration outgoingConfig, Message<?> message,
+            String minId, String fieldTtl) {
         Uni<String> xaddUni = redisAPI.xAdd(
                 outgoingConfig.getStreamKey(),
                 "*",
                 outgoingConfig.getXaddMaxlen().orElse(null),
                 outgoingConfig.getXaddExactMaxlen(),
                 minId,
-                createRedisMessageFields(message, outgoingConfig, fieldTtl))
-                .onFailure()
+                createRedisMessageFields(message, outgoingConfig, fieldTtl));
+        return retryOutgoingSend(logSingleSendFailure(xaddUni, outgoingConfig, message), outgoingConfig).map(List::of);
+    }
+
+    private Uni<String> logSingleSendFailure(Uni<String> xaddUni, RedisStreamsConnectorOutgoingConfiguration outgoingConfig, Message<?> message) {
+        return xaddUni.onFailure()
                 .invoke(
                         e -> log.errorv(
                                 e,
                                 "Error occurred while sending message to redis stream [{0}] and message [{1}]: {2}",
                                 outgoingConfig.getStreamKey(),
                                 message.getPayload(),
-                                e.getMessage())
-                );
-        long retries = outgoingConfig.getRetries();
-        if (retries == 0) {
-            // no retries, just return the Uni
-            return xaddUni;
-        }
-        long retryInitialDelayMs = outgoingConfig.getRetryInitialDelayMs();
-        long retryMaxDelayMs = outgoingConfig.getRetryMaxDelayMs();
-        UniRetry<String> uniRetry = xaddUni
-                .onFailure()
-                .retry()
-                .withBackOff(Duration.ofMillis(retryInitialDelayMs), Duration.ofSeconds(retryMaxDelayMs));
+                                e.getMessage()));
+    }
 
-        if (retries > 0) {
-            // retry at most the configured number of times
-            return uniRetry.atMost(retries);
-        }
-        // otherwise retry indefinitely
-        return uniRetry.indefinitely();
+    private Uni<List<String>> logPipelinedSendFailure(Uni<List<String>> xaddUni, RedisStreamsConnectorOutgoingConfiguration outgoingConfig,
+            Message<?> message) {
+        return xaddUni.onFailure()
+                .invoke(
+                        e -> log.errorv(
+                                e,
+                                "Error occurred while sending pipelined message batch to redis stream [{0}] and message [{1}]: {2}",
+                                outgoingConfig.getStreamKey(),
+                                message.getPayload(),
+                                e.getMessage()));
     }
 
     /**
@@ -624,13 +654,31 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
      */
     protected Map<String, String> createRedisMessageFields(Message<?> message, RedisStreamsConnectorOutgoingConfiguration outgoingConfig,
             String fieldTtl) {
+        return createRedisMessageFields(message.getPayload(), getRedisStreamMetadata(message), outgoingConfig, fieldTtl);
+    }
+
+    /**
+     * Creates the map for the fields of the new redis stream message
+     *
+     * @param payload
+     *            the payload of the redis stream message
+     * @param redisStreamMetadata
+     *            the optional metadata of the redis stream message
+     * @param outgoingConfig
+     *            the configuration for the output Redis stream, including stream key, group, and other settings
+     * @param fieldTtl
+     *            value for the ttl field of the redis stream message
+     * @return the created fields
+     */
+    protected Map<String, String> createRedisMessageFields(Object payload, Optional<RedisStreamMetadata> redisStreamMetadata,
+            RedisStreamsConnectorOutgoingConfiguration outgoingConfig,
+            String fieldTtl) {
         Map<String, String> streamEntryFields = new HashMap<>();
-        String serializedPayload = jsonbSerializer.serialize(message.getPayload());
+        String serializedPayload = jsonbSerializer.serialize(payload);
         streamEntryFields.put(outgoingConfig.getPayloadField(), serializedPayload);
         if (fieldTtl != null) {
             streamEntryFields.put("ttl", fieldTtl);
         }
-        Optional<RedisStreamMetadata> redisStreamMetadata = message.getMetadata().get(RedisStreamMetadata.class);
         if (redisStreamMetadata.isEmpty()) {
             return streamEntryFields;
         }
@@ -647,6 +695,69 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             }
         }
         return streamEntryFields;
+    }
+
+    private Optional<List<StreamEntry>> createPipelinedEntries(Message<?> message, Optional<RedisStreamMetadata> redisStreamMetadata,
+            RedisStreamsConnectorOutgoingConfiguration outgoingConfig, String fieldTtl) {
+        if (redisStreamMetadata.isEmpty() || !redisStreamMetadata.get().isPipelined()) {
+            return Optional.empty();
+        }
+        Object payload = message.getPayload();
+        if (payload instanceof Iterable<?> iterable) {
+            return Optional.of(
+                    StreamSupport.stream(iterable.spliterator(), false)
+                            .map(item -> toOutgoingStreamEntry(item, redisStreamMetadata, outgoingConfig, fieldTtl))
+                            .toList());
+        }
+        if (payload instanceof Stream<?> stream) {
+            try (stream) {
+                return Optional.of(
+                        stream
+                                .map(item -> toOutgoingStreamEntry(item, redisStreamMetadata, outgoingConfig, fieldTtl))
+                                .toList());
+            }
+        }
+        if (Objects.nonNull(payload) && payload.getClass().isArray() && !payload.getClass().getComponentType().isPrimitive()) {
+            return Optional.of(
+                    Arrays.stream((Object[]) payload)
+                            .map(item -> toOutgoingStreamEntry(item, redisStreamMetadata, outgoingConfig, fieldTtl))
+                            .toList());
+        }
+        log.warnv(
+                "Ignoring pipelined RedisStreamMetadata for non-batch payload type [{0}] on stream [{1}]",
+                Objects.isNull(payload) ? null : payload.getClass().getName(),
+                outgoingConfig.getStreamKey());
+        return Optional.empty();
+    }
+
+    private StreamEntry toOutgoingStreamEntry(Object batchItem, Optional<RedisStreamMetadata> redisStreamMetadata,
+            RedisStreamsConnectorOutgoingConfiguration outgoingConfig, String fieldTtl) {
+        return new StreamEntry(
+                outgoingConfig.getStreamKey(),
+                "*",
+                createRedisMessageFields(batchItem, redisStreamMetadata, outgoingConfig, fieldTtl));
+    }
+
+    private Optional<RedisStreamMetadata> getRedisStreamMetadata(Message<?> message) {
+        return message.getMetadata().get(RedisStreamMetadata.class);
+    }
+
+    private <T> Uni<T> retryOutgoingSend(Uni<T> xaddUni, RedisStreamsConnectorOutgoingConfiguration outgoingConfig) {
+        long retries = outgoingConfig.getRetries();
+        if (retries == 0) {
+            return xaddUni;
+        }
+        long retryInitialDelayMs = outgoingConfig.getRetryInitialDelayMs();
+        long retryMaxDelayMs = outgoingConfig.getRetryMaxDelayMs();
+        UniRetry<T> uniRetry = xaddUni
+                .onFailure()
+                .retry()
+                .withBackOff(Duration.ofMillis(retryInitialDelayMs), Duration.ofMillis(retryMaxDelayMs));
+
+        if (retries > 0) {
+            return uniRetry.atMost(retries);
+        }
+        return uniRetry.indefinitely();
     }
 
     /**

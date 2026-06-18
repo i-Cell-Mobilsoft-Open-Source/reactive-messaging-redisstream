@@ -45,6 +45,7 @@ import io.quarkus.redis.deployment.client.RequestedRedisClientBuildItem;
 import io.quarkus.redis.runtime.client.config.RedisConfig;
 import io.quarkus.smallrye.reactivemessaging.deployment.items.ChannelDirection;
 import io.quarkus.smallrye.reactivemessaging.deployment.items.ConnectorManagedChannelBuildItem;
+import io.vertx.mutiny.redis.client.Redis;
 import io.vertx.mutiny.redis.client.RedisAPI;
 
 /**
@@ -127,6 +128,7 @@ public class RedisstreamExtensionProcessor {
                 jandexQualifier = AnnotationInstance.builder(RedisClientName.class).value(name).build();
             }
             // Add redisclients as injectionPoints to prevent removal
+            redisStreamsProducer.addInjectionPoint(ClassType.create(DotName.createSimple(Redis.class)), jandexQualifier);
             redisStreamsProducer.addInjectionPoint(ClassType.create(DotName.createSimple(RedisAPI.class)), jandexQualifier);
         }
 
