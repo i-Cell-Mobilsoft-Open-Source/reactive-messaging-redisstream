@@ -56,6 +56,8 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
      *
      * @param redisAPI
      *            the RedisAPI instance to use for Redis operations
+     * @param redis
+     *            the Redis instance to use for Redis batch operations
      */
     public QuarkusRedisStreamsAdapter(Redis redis, RedisAPI redisAPI) {
         this.redis = redis;
@@ -115,13 +117,14 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
             return Uni.createFrom().item(List.of());
         }
         List<Request> requests = entries.stream()
-                .map(entry -> createXAddRequest(
-                        entry.stream(),
-                        Optional.ofNullable(entry.id()).orElse("*"),
-                        maxLen,
-                        exact,
-                        minId,
-                        Optional.ofNullable(entry.fields()).orElse(Map.of())))
+                .map(
+                        entry -> createXAddRequest(
+                                entry.stream(),
+                                Optional.ofNullable(entry.id()).orElse("*"),
+                                maxLen,
+                                exact,
+                                minId,
+                                Optional.ofNullable(entry.fields()).orElse(Map.of())))
                 .toList();
         return redis.batch(requests)
                 .onSubscription()
