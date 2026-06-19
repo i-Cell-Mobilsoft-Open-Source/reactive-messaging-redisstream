@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.StreamSupport;
 
@@ -84,14 +85,16 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
                     }
                     return StreamSupport.stream(response.spliterator(), false)
                             .map(r -> r.get("name"))
-                            .map(Response::toString)
+                            .map(this::responseToString)
+                            .filter(Objects::nonNull)
                             .anyMatch(group::equals);
                 });
     }
 
     @Override
     public Uni<String> xGroupCreate(String stream, String group) {
-        return redisAPI.xgroup(List.of("CREATE", stream, group, "0", "MKSTREAM")).map(Response::toString);
+        return redisAPI.xgroup(List.of("CREATE", stream, group, "0", "MKSTREAM"))
+                .map(this::responseToString);
     }
 
     @Override
@@ -108,7 +111,7 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
     public Uni<String> xAdd(String stream, String id, Integer maxLen, Boolean exact, String minId, Map<String, String> fields) {
         List<String> xAddArgs = createXAddArgs(stream, id, maxLen, exact, minId, fields);
         Log.tracev("Calling redis command XADD with args:[{0}]", xAddArgs);
-        return redisAPI.xadd(xAddArgs).map(Response::toString);
+        return redisAPI.xadd(xAddArgs).map(this::responseToString);
     }
 
     @Override
@@ -129,7 +132,9 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
         return redis.batch(requests)
                 .onSubscription()
                 .invoke(() -> Log.tracev("Calling redis pipeline with [{0}] XADD request(s)", requests.size()))
-                .map(responses -> responses.stream().map(Response::toString).toList());
+                .map(responses -> responses.stream()
+                        .map(this::responseToString)
+                        .toList());
     }
 
     @Override
@@ -202,6 +207,10 @@ public class QuarkusRedisStreamsAdapter implements RedisStreams {
         Request request = Request.cmd(Command.XADD);
         createXAddArgs(stream, id, maxLen, exact, minId, fields).forEach(request::arg);
         return request;
+    }
+
+    private String responseToString(Response response) {
+        return Objects.isNull(response) ? null : response.toString();
     }
 
     private List<String> createXAddArgs(String stream, String id, Integer maxLen, Boolean exact, String minId, Map<String, String> fields) {

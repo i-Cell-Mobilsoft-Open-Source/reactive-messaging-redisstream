@@ -9,6 +9,8 @@
 * New pipelined batch write support for outgoing channels.
 ** When `RedisStreamMetadata.withPipelined(true)` is set, `Iterable`, `Stream` and object-array payloads are split into multiple Redis stream entries and sent with implementation-specific batch/pipeline support.
 ** Without this metadata flag, batch-like payloads keep the previous behavior and are sent as a single serialized payload.
+* Outgoing retry backoff handling was corrected to use `Duration.ofMillis(retryMaxDelayMs)` for the maximum delay.
+** If you use `retry-max-delay-ms`, note that before this fix the maximum retry backoff could be interpreted as seconds instead of milliseconds.
 
 === Migration
 

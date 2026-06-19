@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -590,6 +591,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     private Uni<List<String>> sendPipelinedEntries(RedisStreams redisAPI, RedisStreamsConnectorOutgoingConfiguration outgoingConfig,
             Message<?> message, String minId, List<StreamEntry> entries) {
         if (entries.isEmpty()) {
+            log.warnv("There is not entry to send in the list to redis stream:[{1}]", message.getPayload(), outgoingConfig.getStreamKey());
             return Uni.createFrom().item(List.of());
         }
         Uni<List<String>> xaddUni = redisAPI.xAdd(
@@ -603,7 +605,15 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                                 "Sent [{0}] pipelined message(s) to redis stream:[{1}]",
                                 ids.size(),
                                 outgoingConfig.getStreamKey()));
-        return retryOutgoingSend(logPipelinedSendFailure(xaddUni, outgoingConfig, message), outgoingConfig);
+        Uni<List<String>> retriedXaddUni = withOutgoingSendRetry(xaddUni, outgoingConfig);
+        return retriedXaddUni.onFailure()
+                .invoke(
+                        e -> log.errorv(
+                                e,
+                                "Error occurred while sending pipelined message batch to redis stream [{0}] and message [{1}]: {2}",
+                                outgoingConfig.getStreamKey(),
+                                message.getPayload(),
+                                e.getMessage()));
     }
 
     private Uni<List<String>> sendPlainPayload(RedisStreams redisAPI, RedisStreamsConnectorOutgoingConfiguration outgoingConfig, Message<?> message,
@@ -615,30 +625,16 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 outgoingConfig.getXaddExactMaxlen(),
                 minId,
                 createRedisMessageFields(message, outgoingConfig, fieldTtl));
-        return retryOutgoingSend(logSingleSendFailure(xaddUni, outgoingConfig, message), outgoingConfig).map(List::of);
-    }
-
-    private Uni<String> logSingleSendFailure(Uni<String> xaddUni, RedisStreamsConnectorOutgoingConfiguration outgoingConfig, Message<?> message) {
-        return xaddUni.onFailure()
+        Uni<String> retriedXaddUni = withOutgoingSendRetry(xaddUni, outgoingConfig);
+        return retriedXaddUni.onFailure()
                 .invoke(
                         e -> log.errorv(
                                 e,
                                 "Error occurred while sending message to redis stream [{0}] and message [{1}]: {2}",
                                 outgoingConfig.getStreamKey(),
                                 message.getPayload(),
-                                e.getMessage()));
-    }
-
-    private Uni<List<String>> logPipelinedSendFailure(Uni<List<String>> xaddUni, RedisStreamsConnectorOutgoingConfiguration outgoingConfig,
-            Message<?> message) {
-        return xaddUni.onFailure()
-                .invoke(
-                        e -> log.errorv(
-                                e,
-                                "Error occurred while sending pipelined message batch to redis stream [{0}] and message [{1}]: {2}",
-                                outgoingConfig.getStreamKey(),
-                                message.getPayload(),
-                                e.getMessage()));
+                                e.getMessage()))
+                .map(Collections::singletonList);
     }
 
     /**
@@ -742,7 +738,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         return message.getMetadata().get(RedisStreamMetadata.class);
     }
 
-    private <T> Uni<T> retryOutgoingSend(Uni<T> xaddUni, RedisStreamsConnectorOutgoingConfiguration outgoingConfig) {
+    private <T> Uni<T> withOutgoingSendRetry(Uni<T> xaddUni, RedisStreamsConnectorOutgoingConfiguration outgoingConfig) {
         long retries = outgoingConfig.getRetries();
         if (retries == 0) {
             return xaddUni;

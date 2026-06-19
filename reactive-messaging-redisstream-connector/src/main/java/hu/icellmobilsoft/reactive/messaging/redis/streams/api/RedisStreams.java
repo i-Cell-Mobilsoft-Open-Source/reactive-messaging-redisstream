@@ -120,7 +120,9 @@ public interface RedisStreams {
      * @return a Uni containing the IDs of the added messages
      * @since 1.4.0
      */
-    Uni<List<String>> xAdd(List<StreamEntry> entries, Integer maxLen, Boolean exact, String minId);
+    default Uni<List<String>> xAdd(List<StreamEntry> entries, Integer maxLen, Boolean exact, String minId) {
+        throw new UnsupportedOperationException("Batch xAdd(List<StreamEntry>, ...) is not implemented by " + getClass().getName());
+    }
 
     /**
      * Reads messages from the specified stream and group.
