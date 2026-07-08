@@ -28,6 +28,7 @@ import hu.icellmobilsoft.reactive.messaging.redis.streams.api.RedisStreamsProduc
 import io.quarkus.arc.SyntheticCreationalContext;
 import io.quarkus.redis.client.RedisClientName;
 import io.quarkus.runtime.annotations.Recorder;
+import io.vertx.mutiny.redis.client.Redis;
 import io.vertx.mutiny.redis.client.RedisAPI;
 
 /**
@@ -69,8 +70,9 @@ public class RedisStreamsRecorder {
             if (connectionKey != null && !RedisStreamsProducer.DEFAULT_CONNECTION_KEY.equals(connectionKey)) {
                 qualifier = RedisClientName.Literal.of(connectionKey);
             }
+            Redis redis = ctx.getInjectedReference(Redis.class, qualifier);
             RedisAPI redisApi = ctx.getInjectedReference(RedisAPI.class, qualifier);
-            return new QuarkusRedisStreamsAdapter(redisApi);
+            return new QuarkusRedisStreamsAdapter(redis, redisApi);
         };
     }
 }

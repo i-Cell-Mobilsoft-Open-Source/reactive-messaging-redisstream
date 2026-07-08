@@ -181,6 +181,42 @@ class RedisStreamsConnectorTest {
         );
     }
 
+    @Test
+    void testProducerBatchList() {
+        String streamKey = "out-batch-list-stream";
+        List<String> messages = List.of("batch-1", "batch-2", "batch-3");
+
+        ReactiveStreamCommands<String, String, String> streamCommand = redisDataSource.stream(String.class);
+        testProducer.produceBatchList(messages);
+
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+            List<StreamMessage<String, String, String>> streamMessages = streamCommand
+                    .xread(streamKey, ZERO_OFFSET, new XReadArgs().count(messages.size()))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+            assertThat(streamMessages).hasSize(messages.size());
+            assertThat(streamMessages).extracting(sm -> sm.payload().get(DEFAULT_MESSAGE_KEY)).containsExactlyElementsOf(messages);
+        });
+    }
+
+    @Test
+    void testProducerBatchStream() {
+        String streamKey = "out-batch-stream";
+        List<String> messages = List.of("stream-1", "stream-2");
+
+        ReactiveStreamCommands<String, String, String> streamCommand = redisDataSource.stream(String.class);
+        testProducer.produceBatchStream(messages.stream());
+
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+            List<StreamMessage<String, String, String>> streamMessages = streamCommand
+                    .xread(streamKey, ZERO_OFFSET, new XReadArgs().count(messages.size()))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+            assertThat(streamMessages).hasSize(messages.size());
+            assertThat(streamMessages).extracting(sm -> sm.payload().get(DEFAULT_MESSAGE_KEY)).containsExactlyElementsOf(messages);
+        });
+    }
+
     private void assertThatMessageIsAckedOnRedis(String messageId, ReactiveStreamCommands<String, String, String> streamCommand,
             String streamKey) {
         List<StreamMessage<String, String, String>> xreadgroup = streamCommand
