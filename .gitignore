@@ -1,0 +1,62 @@
+#Maven
+target/
+local/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+release.properties
+.flattened-pom.xml
+.java-version
+# Eclipse
+.project
+.classpath
+.settings/
+bin/
+
+# IntelliJ
+.idea
+*.ipr
+*.iml
+*.iws
+
+# NetBeans
+nb-configuration.xml
+
+# Visual Studio Code
+.vscode
+.factorypath
+
+# OSX
+.DS_Store
+
+# Vim
+*.swp
+*.swo
+
+# patch
+*.orig
+*.rej
+
+# Local environment
+.env
+
+# Plugin directory
+/.quarkus/cli/plugins/
+# TLS Certificates
+.certs/
+
+node_modules
+*.log
+explorations
+TODOs.md
+RELEASE_NOTE*.md
+packages/server-renderer/basic.js
+packages/server-renderer/build.dev.js
+packages/server-renderer/build.prod.js
+packages/server-renderer/server-plugin.js
+packages/server-renderer/client-plugin.js
+packages/template-compiler/build.js
+packages/template-compiler/browser.js
+dist
+temp
+types/v3-generated.d.ts
