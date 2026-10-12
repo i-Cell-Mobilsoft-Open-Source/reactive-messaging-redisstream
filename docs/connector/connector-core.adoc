@@ -110,6 +110,17 @@ mp.messaging.outgoing.out-channel.xadd-exact-maxlen=true #<5>
 <5> Enable exact trimming by entry count.
 <6> Possible trimming based on milliseconds to set the TTL for the stream entry.
 
+== OpenTelemetry Tracing
+
+When an OpenTelemetry implementation is configured, the connector creates producer spans for outgoing messages and consumer spans for incoming
+messages. Spans include the Redis stream destination and use `redisstream` as the messaging system.
+
+The outgoing trace context is propagated in the Redis stream entry's `traceparent` field. The incoming consumer span links to the propagated span,
+so tracing continues across Redis Streams without making the producer span the consumer span's parent.
+
+If no OpenTelemetry implementation is configured, the connector falls back to `GlobalOpenTelemetry`; tracing is then a no-op unless a global
+OpenTelemetry instance has been registered.
+
 == Graceful Shutdown
 
 On shutdown:
