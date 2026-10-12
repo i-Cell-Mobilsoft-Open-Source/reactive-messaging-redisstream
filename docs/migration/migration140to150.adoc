@@ -1,0 +1,14 @@
+= 1.4.0 -> 1.5.0
+
+== reactive-messaging-redisstream-connector
+
+* Added OpenTelemetry tracing support for outgoing and incoming Redis Stream messages.
+** Outgoing messages create producer spans and propagate the trace context in the Redis entry's `traceparent` field.
+** Incoming messages create consumer spans and link them to the propagated producer context.
+** Spans include messaging attributes, with `redisstream` as the messaging system and the Redis stream key as the destination.
+
+=== Migration
+
+No connector configuration or source-code changes are required to upgrade.
+To export spans, configure an OpenTelemetry implementation in your application. Without one, tracing uses `GlobalOpenTelemetry` and is a no-op unless a global instance has been registered.
+The connector uses the Redis entry's `traceparent` field for trace-context propagation; avoid using that field for application data.
