@@ -36,6 +36,11 @@
             <scope>provided</scope>
         </dependency>
 
+        <dependency>
+            <groupId>io.smallrye.reactive</groupId>
+            <artifactId>smallrye-reactive-messaging-otel</artifactId>
+        </dependency>
+
         <!-- Jakarta JSON-B API -->
         <dependency>
             <groupId>jakarta.json.bind</groupId>
@@ -53,7 +58,14 @@
         <dependency>
             <groupId>org.eclipse.microprofile.reactive-streams-operators</groupId>
             <artifactId>microprofile-reactive-streams-operators-api</artifactId>
-
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-testing</artifactId>
         </dependency>
         <dependency>
             <groupId>org.awaitility</groupId>
