@@ -49,7 +49,7 @@ public class RedisStreamsOpenTelemetryInstrumenter {
     /**
      * Instrumentation library name reported as {@code otel.library.name} on the produced spans.
      */
-    public static final String INSTRUMENTATION_NAME = "io.smallrye.reactive.messaging.redis.streams";
+    public static final String INSTRUMENTATION_NAME = "hu.icellmobilsoft.reactive.messaging.redis.streams";
 
     private final Instrumenter<RedisStreamTrace, Void> instrumenter;
 

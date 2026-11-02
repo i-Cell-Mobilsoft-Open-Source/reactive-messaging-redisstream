@@ -119,7 +119,12 @@ The outgoing trace context is propagated in the Redis stream entry's `traceparen
 so tracing continues across Redis Streams without making the producer span the consumer span's parent.
 
 If no OpenTelemetry implementation is configured, the connector falls back to `GlobalOpenTelemetry`; tracing is then a no-op unless a global
-OpenTelemetry instance has been registered.
+OpenTelemetry instance has been registered. The instance is resolved lazily on first use, so a global instance must be registered before the first message is processed.
+
+* Every field written by the configured propagator (`traceparent`, and e.g. `tracestate` or `baggage`) is sent as a Redis stream entry field.
+* Producer and consumer spans are ended immediately (same as in SmallRye Kafka tracing): the consumer span does not cover message processing and a failed `XADD` is not recorded on the producer span.
+* For pipelined (batch) payloads a single producer span is created and all entries of the batch carry the same `traceparent`. No span is created if the payload is not a supported batch type.
+* The messaging semantic convention API used underneath (`incubator.semconv.messaging.*`) is unstable and may change with OpenTelemetry version upgrades.
 
 == Graceful Shutdown
 

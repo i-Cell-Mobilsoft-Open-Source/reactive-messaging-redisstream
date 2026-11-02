@@ -95,13 +95,13 @@
             <dependency>
                 <groupId>io.opentelemetry</groupId>
                 <artifactId>opentelemetry-sdk</artifactId>
-                <version>1.42.1</version>
+                <version>1.39.0</version>
                 <scope>test</scope>
             </dependency>
             <dependency>
                 <groupId>io.opentelemetry</groupId>
                 <artifactId>opentelemetry-sdk-testing</artifactId>
-                <version>1.42.1</version>
+                <version>1.39.0</version>
                 <scope>test</scope>
             </dependency>
         </dependencies>

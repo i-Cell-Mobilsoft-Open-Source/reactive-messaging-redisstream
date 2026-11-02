@@ -9,6 +9,7 @@
 
 === Migration
 
-No connector configuration or source-code changes are required to upgrade.
+No connector configuration changes are required to upgrade.
+The `@Inject` constructor of `RedisStreamsConnector` received a new `Instance<OpenTelemetry>` parameter.
 To export spans, configure an OpenTelemetry implementation in your application. Without one, tracing uses `GlobalOpenTelemetry` and is a no-op unless a global instance has been registered.
 The connector uses the Redis entry's `traceparent` field for trace-context propagation; avoid using that field for application data.

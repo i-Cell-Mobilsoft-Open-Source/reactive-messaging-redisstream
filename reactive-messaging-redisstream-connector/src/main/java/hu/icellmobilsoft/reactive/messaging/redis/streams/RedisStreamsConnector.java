@@ -152,8 +152,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
     private final ReducableSemaphore shutdownPermit = new ReducableSemaphore(1);
     private final Integer gracefulShutdownTimeout;
     private final ExecutionHolder executionHolder;
-    private final RedisStreamsOpenTelemetryInstrumenter incomingOpenTelemetryInstrumenter;
-    private final RedisStreamsOpenTelemetryInstrumenter outgoingOpenTelemetryInstrumenter;
+    private final Instance<OpenTelemetry> openTelemetryInstance;
+    private volatile RedisStreamsOpenTelemetryInstrumenter incomingOpenTelemetryInstrumenter;
+    private volatile RedisStreamsOpenTelemetryInstrumenter outgoingOpenTelemetryInstrumenter;
 
     /**
      * Constructs a RedisStreamsConnector with the specified CDI RedisStreamsProducer.
@@ -180,8 +181,25 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         this.jsonbSerializer = jsonbSerializer;
         this.gracefulShutdownTimeout = gracefulShutdownTimeout;
         this.executionHolder = executionHolder;
-        this.incomingOpenTelemetryInstrumenter = RedisStreamsOpenTelemetryInstrumenter.createForIncoming(openTelemetryInstance);
-        this.outgoingOpenTelemetryInstrumenter = RedisStreamsOpenTelemetryInstrumenter.createForOutgoing(openTelemetryInstance);
+        this.openTelemetryInstance = openTelemetryInstance;
+    }
+
+    private RedisStreamsOpenTelemetryInstrumenter incomingInstrumenter() {
+        RedisStreamsOpenTelemetryInstrumenter instrumenter = incomingOpenTelemetryInstrumenter;
+        if (Objects.isNull(instrumenter)) {
+            instrumenter = RedisStreamsOpenTelemetryInstrumenter.createForIncoming(openTelemetryInstance);
+            incomingOpenTelemetryInstrumenter = instrumenter;
+        }
+        return instrumenter;
+    }
+
+    private RedisStreamsOpenTelemetryInstrumenter outgoingInstrumenter() {
+        RedisStreamsOpenTelemetryInstrumenter instrumenter = outgoingOpenTelemetryInstrumenter;
+        if (Objects.isNull(instrumenter)) {
+            instrumenter = RedisStreamsOpenTelemetryInstrumenter.createForOutgoing(openTelemetryInstance);
+            outgoingOpenTelemetryInstrumenter = instrumenter;
+        }
+        return instrumenter;
     }
 
     /**
@@ -374,7 +392,9 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
                 .withId(streamEntry.id())
                 .withFields(streamEntry.fields())
                 .build();
-        return (Message<Object>) incomingOpenTelemetryInstrumenter.traceIncoming(message, redisStreamTrace);
+        @SuppressWarnings("unchecked")
+        Message<Object> tracedMessage = (Message<Object>) incomingInstrumenter().traceIncoming(message, redisStreamTrace);
+        return tracedMessage;
     }
 
     /**
@@ -636,7 +656,8 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
 
     private Uni<List<String>> sendPlainPayload(RedisStreams redisAPI, RedisStreamsConnectorOutgoingConfiguration outgoingConfig, Message<?> message,
             String minId, String fieldTtl) {
-        Map<String, String> fields = createRedisMessageFields(message, outgoingConfig, fieldTtl);
+        // copy: the overridable createRedisMessageFields may return an immutable map
+        Map<String, String> fields = new HashMap<>(createRedisMessageFields(message, outgoingConfig, fieldTtl));
         traceOutgoing(message, outgoingConfig.getStreamKey(), fields);
         Uni<String> xaddUni = redisAPI.xAdd(
                 outgoingConfig.getStreamKey(),
@@ -719,16 +740,16 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             return Optional.empty();
         }
         Object payload = message.getPayload();
-        Map<String, String> traceFields = new HashMap<>();
-        traceOutgoing(message, outgoingConfig.getStreamKey(), traceFields);
 
         if (payload instanceof Iterable<?> iterable) {
+            Map<String, String> traceFields = batchTraceFields(message, outgoingConfig);
             return Optional.of(
                     StreamSupport.stream(iterable.spliterator(), false)
                             .map(item -> toOutgoingStreamEntry(item, redisStreamMetadata, outgoingConfig, fieldTtl, traceFields))
                             .toList());
         }
         if (payload instanceof Stream<?> stream) {
+            Map<String, String> traceFields = batchTraceFields(message, outgoingConfig);
             try (stream) {
                 return Optional.of(
                         stream
@@ -737,6 +758,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
             }
         }
         if (Objects.nonNull(payload) && payload.getClass().isArray() && !payload.getClass().getComponentType().isPrimitive()) {
+            Map<String, String> traceFields = batchTraceFields(message, outgoingConfig);
             return Optional.of(
                     Arrays.stream((Object[]) payload)
                             .map(item -> toOutgoingStreamEntry(item, redisStreamMetadata, outgoingConfig, fieldTtl, traceFields))
@@ -749,9 +771,18 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
         return Optional.empty();
     }
 
+    /**
+     * A single producer span is created for the whole batch, so every entry carries the same trace context.
+     */
+    private Map<String, String> batchTraceFields(Message<?> message, RedisStreamsConnectorOutgoingConfiguration outgoingConfig) {
+        Map<String, String> traceFields = new HashMap<>();
+        traceOutgoing(message, outgoingConfig.getStreamKey(), traceFields);
+        return traceFields;
+    }
+
     private StreamEntry toOutgoingStreamEntry(Object batchItem, Optional<RedisStreamMetadata> redisStreamMetadata,
             RedisStreamsConnectorOutgoingConfiguration outgoingConfig, String fieldTtl, Map<String, String> traceFields) {
-        Map<String, String> fields = createRedisMessageFields(batchItem, redisStreamMetadata, outgoingConfig, fieldTtl);
+        Map<String, String> fields = new HashMap<>(createRedisMessageFields(batchItem, redisStreamMetadata, outgoingConfig, fieldTtl));
         if (Objects.nonNull(traceFields)) {
             fields.putAll(traceFields);
         }
@@ -760,7 +791,7 @@ public class RedisStreamsConnector implements InboundConnector, OutboundConnecto
 
     private void traceOutgoing(Message<?> message, String streamKey, Map<String, String> fields) {
         RedisStreamTrace redisStreamTrace = RedisStreamTrace.builder().withStreamKey(streamKey).withFields(fields).build();
-        outgoingOpenTelemetryInstrumenter.traceOutgoing(message, redisStreamTrace);
+        outgoingInstrumenter().traceOutgoing(message, redisStreamTrace);
     }
 
     private Optional<RedisStreamMetadata> getRedisStreamMetadata(Message<?> message) {
