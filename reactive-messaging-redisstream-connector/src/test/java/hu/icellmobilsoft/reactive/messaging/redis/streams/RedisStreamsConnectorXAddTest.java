@@ -129,7 +129,7 @@ class RedisStreamsConnectorXAddTest {
     private static class TestableRedisStreamsConnector extends RedisStreamsConnector {
 
         TestableRedisStreamsConnector() {
-            super(connectionKey -> null, new RedisStreamJsonbSerializer(), 60000, null);
+            super(connectionKey -> null, new RedisStreamJsonbSerializer(), 60000, null, null);
         }
 
         Uni<List<String>> invokeXAdd(RedisStreams redisStreams, RedisStreamsConnectorOutgoingConfiguration outgoingConfig, Optional<Long> ttlMsOpt,
